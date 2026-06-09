@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import csv
 import io
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -12,7 +12,7 @@ import pandas as pd
 
 
 def _timestamp() -> str:
-    return datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    return datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
 
 
 def _format_cost_md(amount: float) -> str:
@@ -78,7 +78,7 @@ class CostExporter:
     def export_json(self, path: Optional[str] = None) -> str:
         path = path or f"{self._base_name()}.json"
         payload = {
-            "generated": datetime.utcnow().isoformat(),
+            "generated": datetime.now(timezone.utc).isoformat(),
             "days_analyzed": self.days,
             "story": self.story,
             "insights": self.insights,
@@ -127,7 +127,7 @@ class CostExporter:
         lines = [
             f"# Cost Analysis Report",
             f"",
-            f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')} · Last {self.days} days",
+            f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')} · Last {self.days} days",
             f"",
         ]
 
@@ -233,7 +233,7 @@ class CostExporter:
             ws.append(["Total Spend", round(total, 2)])
             ws.append(["Daily Average", round(total / max(self.days, 1), 2)])
             ws.append(["Days Analyzed", self.days])
-            ws.append(["Generated", datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")])
+            ws.append(["Generated", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")])
             if self.story:
                 ws.append([])
                 ws.append(["Cost Story", self.story])
@@ -312,7 +312,7 @@ class CostExporter:
         # Title slide
         slide = prs.slides.add_slide(prs.slide_layouts[0])
         slide.shapes.title.text = "Cost Analysis Report"
-        slide.placeholders[1].text = f"Generated {datetime.utcnow().strftime('%Y-%m-%d')} · Last {self.days} days"
+        slide.placeholders[1].text = f"Generated {datetime.now(timezone.utc).strftime('%Y-%m-%d')} · Last {self.days} days"
 
         # Cost Story slide
         if self.story:
@@ -348,7 +348,7 @@ class CostExporter:
     # ── Slack webhook ─────────────────────────────────────────────────
 
     def send_slack(self, webhook_url: str) -> bool:
-        """Send cost summary to Slack via webhook."""
+        """Explicitly send a cost summary to the user-provided Slack webhook."""
         import urllib.request
         import json as _json
 
@@ -438,7 +438,7 @@ class CostExporter:
         svc_df = self.data.get("service", pd.DataFrame())
         if not svc_df.empty:
             total = svc_df["cost"].sum()
-            today = datetime.utcnow().strftime("%Y%m%d")
+            today = datetime.now(timezone.utc).strftime("%Y%m%d")
             events.append(
                 f"BEGIN:VEVENT\n"
                 f"DTSTART;VALUE=DATE:{today}\n"

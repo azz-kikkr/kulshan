@@ -1,7 +1,12 @@
 """Cost Efficiency Score, composite 0-100 score based on optimization best practices."""
 from __future__ import annotations
 
+import json
+from datetime import datetime, timezone
+from pathlib import Path
+
 import pandas as pd
+from platformdirs import user_data_dir
 
 
 def compute_efficiency_score(
@@ -121,17 +126,15 @@ def _grade(score: float) -> str:
 
 # ── Score tracking over time ──────────────────────────────────────────────
 
-import json
-from pathlib import Path
-from datetime import datetime
-
-SCORE_HISTORY_FILE = ".cost-analyzer-scores.json"
+SCORE_HISTORY_FILE = str(
+    Path(user_data_dir("Kulshan", "missionfinops")) / "cost-analyzer-scores.json"
+)
 
 
 def save_score(score_data: dict, total_spend: float):
     """Append current score to local history file."""
     entry = {
-        "date": datetime.utcnow().strftime("%Y-%m-%d"),
+        "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
         "score": score_data["total_score"],
         "grade": score_data["grade"],
         "total_spend": round(total_spend, 2),
@@ -147,7 +150,9 @@ def save_score(score_data: dict, total_spend: float):
 
     # Keep last 365 entries
     history = history[-365:]
-    Path(SCORE_HISTORY_FILE).write_text(json.dumps(history, indent=2))
+    path = Path(SCORE_HISTORY_FILE)
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    path.write_text(json.dumps(history, indent=2), encoding="utf-8")
 
 
 def load_score_history() -> list[dict]:
@@ -156,7 +161,7 @@ def load_score_history() -> list[dict]:
     if not path.exists():
         return []
     try:
-        return json.loads(path.read_text())
+        return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return []
 
@@ -174,7 +179,7 @@ def get_score_trend() -> dict | None:
     # Find 30-day-ago entry if available
     thirty_days_ago = None
     for entry in reversed(history):
-        if entry["date"] < (datetime.utcnow().replace(day=1)).strftime("%Y-%m-%d"):
+        if entry["date"] < datetime.now(timezone.utc).replace(day=1).strftime("%Y-%m-%d"):
             thirty_days_ago = entry
             break
 

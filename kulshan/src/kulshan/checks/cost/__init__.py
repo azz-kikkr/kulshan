@@ -292,6 +292,12 @@ def run_scan(session=None, regions=None, *, quick: bool = False, **kwargs) -> di
     from .analyzers.anomaly import detect_anomalies
     from .analyzers.efficiency import compute_efficiency_score
     from .analyzers.waste import detect_idle_services
+    from .analyzers.advanced import (
+        compute_purchase_type_mix,
+        compute_cost_velocity,
+        compute_hhi_concentration,
+        compute_executive_scorecard,
+    )
     from .aws_native import apply_overlap_boost
 
     errors: list[str] = []
@@ -368,6 +374,44 @@ def run_scan(session=None, regions=None, *, quick: bool = False, **kwargs) -> di
             canonical_sev = _ANALYZER_SEVERITY_MAP.get(str(raw_sev).lower(), "low")
             severity_counts[canonical_sev] = severity_counts.get(canonical_sev, 0) + int(count)
 
+    # ── Advanced Analytics (Phase 7) ────────────────────────────────────
+    # These are best-effort: failures are captured as errors, not fatal.
+
+    # 1. Purchase Type Mix
+    purchase_mix: dict = {}
+    try:
+        purchase_mix = compute_purchase_type_mix(fetcher, days=days)
+    except Exception as e:
+        errors.append(f"Purchase type mix: {e}")
+
+    # 2. Cost Velocity
+    velocity: dict = {}
+    try:
+        velocity = compute_cost_velocity(service_data, days=days)
+    except Exception as e:
+        errors.append(f"Cost velocity: {e}")
+
+    # 3. HHI Concentration
+    hhi: dict = {}
+    try:
+        hhi = compute_hhi_concentration(service_data)
+    except Exception as e:
+        errors.append(f"HHI concentration: {e}")
+
+    # 5. Executive Scorecard
+    scorecard: dict = {}
+    try:
+        scorecard = compute_executive_scorecard(
+            efficiency_breakdown=breakdown,
+            purchase_mix=purchase_mix,
+            velocity=velocity,
+            hhi=hhi,
+            total_spend=total_spend,
+            total_findings=len(findings),
+        )
+    except Exception as e:
+        errors.append(f"Executive scorecard: {e}")
+
     return {
         "tool": "cost",
         "scores": {
@@ -382,5 +426,9 @@ def run_scan(session=None, regions=None, *, quick: bool = False, **kwargs) -> di
         "errors": errors,
         "metadata": {
             "cost_anomaly_detection": aws_metadata,
+            "purchase_mix": purchase_mix,
+            "cost_velocity": velocity,
+            "hhi_concentration": hhi,
+            "executive_scorecard": scorecard,
         },
     }

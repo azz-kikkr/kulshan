@@ -113,6 +113,81 @@
         "Kulshan_only_count": 1,
         "aws_only_count": 0
       }
+    },
+    "purchase_mix": {
+      "mix": [
+        {"type": "On-Demand", "cost": 7407.40, "pct": 60.0},
+        {"type": "Savings Plans", "cost": 3086.42, "pct": 25.0},
+        {"type": "Reserved", "cost": 1234.57, "pct": 10.0},
+        {"type": "Spot", "cost": 617.28, "pct": 5.0}
+      ],
+      "on_demand_pct": 60.0,
+      "committed_pct": 35.0,
+      "spot_pct": 5.0,
+      "total": 12345.67,
+      "assessment": "Moderate — significant on-demand exposure. Consider expanding Savings Plans coverage for EC2 and RDS."
+    },
+    "cost_velocity": {
+      "daily_avg": 411.52,
+      "velocity": 8.43,
+      "acceleration": 1.2,
+      "velocity_pct": 2.05,
+      "trend": "accelerating",
+      "warning": "Costs accelerating at 2.1%/day. Projected 30-day spend: $16,236 (vs $12,346 at current rate).",
+      "daily_costs": [
+        320.10, 335.40, 342.80, 355.20, 360.50, 372.90, 378.40, 385.60,
+        390.20, 398.70, 405.30, 410.80, 415.60, 420.30, 425.90, 430.10,
+        435.80, 440.20, 445.60, 450.30, 455.10, 460.80, 465.20, 470.50,
+        475.80, 480.30, 485.60, 490.20, 495.40, 500.10
+      ]
+    },
+    "hhi_concentration": {
+      "hhi": 2842,
+      "classification": "concentrated",
+      "top_services": [
+        {"service": "Amazon EC2", "pct": 42.0, "cost": 5185.18},
+        {"service": "Amazon RDS", "pct": 22.0, "cost": 2716.05},
+        {"service": "Amazon S3", "pct": 14.0, "cost": 1728.39},
+        {"service": "AWS Lambda", "pct": 8.0, "cost": 987.65},
+        {"service": "Amazon CloudWatch", "pct": 6.0, "cost": 740.74}
+      ],
+      "risk_assessment": "Highly concentrated: Amazon EC2 is 42% of spend. Consider diversification or negotiation leverage.",
+      "effective_services": 4
+    },
+    "executive_scorecard": {
+      "pillars": [
+        {
+          "name": "Cost Health",
+          "score": 60,
+          "grade": "D",
+          "icon": "\ud83d\udcb0",
+          "detail": "Velocity: +2.1%/day, 3 findings"
+        },
+        {
+          "name": "Commitment",
+          "score": 46,
+          "grade": "F",
+          "icon": "\ud83d\udccb",
+          "detail": "35% committed spend"
+        },
+        {
+          "name": "Efficiency",
+          "score": 60,
+          "grade": "D",
+          "icon": "\u26a1",
+          "detail": "60% on-demand exposure"
+        },
+        {
+          "name": "Risk",
+          "score": 55,
+          "grade": "F",
+          "icon": "\ud83d\udee1\ufe0f",
+          "detail": "HHI 2,842 (concentrated)"
+        }
+      ],
+      "composite_score": 56,
+      "composite_grade": "F",
+      "headline": "Significant optimization opportunities across multiple pillars."
     }
   },
   "errors": []

@@ -2,7 +2,7 @@
 import pytest
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch, MagicMock
 from io import StringIO
 from pathlib import Path
@@ -16,7 +16,10 @@ import os
 def _make_daily_df(group_col: str, name: str, costs: list[float], start_days_ago: int = None) -> pd.DataFrame:
     if start_days_ago is None:
         start_days_ago = len(costs)
-    dates = [datetime.utcnow().date() - timedelta(days=start_days_ago - i) for i in range(len(costs))]
+    dates = [
+        datetime.now(timezone.utc).date() - timedelta(days=start_days_ago - i)
+        for i in range(len(costs))
+    ]
     return pd.DataFrame({"date": pd.to_datetime(dates), group_col: name, "cost": costs})
 
 
@@ -596,61 +599,55 @@ class TestPackageMetadata:
 # ── Score Tracking Tests (4 tests) ───────────────────────────────────────────
 
 class TestScoreTracking:
-    def test_save_and_load(self):
-        from kulshan.checks.cost.analyzers.efficiency import save_score, load_score_history, SCORE_HISTORY_FILE
-        backup = None
-        path = Path(SCORE_HISTORY_FILE)
-        if path.exists():
-            backup = path.read_text()
-        try:
-            path.unlink(missing_ok=True)
-            save_score({"total_score": 75, "grade": "C"}, 50000)
-            history = load_score_history()
-            assert len(history) == 1
-            assert history[0]["score"] == 75
-        finally:
-            if backup:
-                path.write_text(backup)
-            else:
-                path.unlink(missing_ok=True)
+    class _MemoryPath:
+        content = None
 
-    def test_no_duplicate_same_day(self):
-        from kulshan.checks.cost.analyzers.efficiency import save_score, load_score_history, SCORE_HISTORY_FILE
-        path = Path(SCORE_HISTORY_FILE)
-        backup = path.read_text() if path.exists() else None
-        try:
-            path.unlink(missing_ok=True)
-            save_score({"total_score": 50, "grade": "D"}, 10000)
-            save_score({"total_score": 60, "grade": "D"}, 12000)
-            history = load_score_history()
-            assert len(history) == 1
-            assert history[0]["score"] == 60
-        finally:
-            if backup:
-                path.write_text(backup)
-            else:
-                path.unlink(missing_ok=True)
+        def __init__(self, _path=""):
+            self.parent = self
 
-    def test_load_empty(self):
-        from kulshan.checks.cost.analyzers.efficiency import load_score_history, SCORE_HISTORY_FILE
-        path = Path(SCORE_HISTORY_FILE)
-        backup = path.read_text() if path.exists() else None
-        try:
-            path.unlink(missing_ok=True)
-            assert load_score_history() == []
-        finally:
-            if backup:
-                path.write_text(backup)
+        def mkdir(self, **_kwargs):
+            return None
 
-    def test_trend_insufficient_data(self):
-        from kulshan.checks.cost.analyzers.efficiency import get_score_trend, SCORE_HISTORY_FILE
-        path = Path(SCORE_HISTORY_FILE)
-        backup = path.read_text() if path.exists() else None
-        try:
-            path.write_text("[]")
-            assert get_score_trend() is None
-        finally:
-            if backup:
-                path.write_text(backup)
-            else:
-                path.unlink(missing_ok=True)
+        def exists(self):
+            return self.content is not None
+
+        def write_text(self, content, **_kwargs):
+            type(self).content = content
+
+        def read_text(self, **_kwargs):
+            return type(self).content
+
+    def setup_method(self):
+        self._MemoryPath.content = None
+
+    def test_save_and_load(self, monkeypatch):
+        from kulshan.checks.cost.analyzers import efficiency
+
+        monkeypatch.setattr(efficiency, "Path", self._MemoryPath)
+        efficiency.save_score({"total_score": 75, "grade": "C"}, 50000)
+        history = efficiency.load_score_history()
+        assert len(history) == 1
+        assert history[0]["score"] == 75
+
+    def test_no_duplicate_same_day(self, monkeypatch):
+        from kulshan.checks.cost.analyzers import efficiency
+
+        monkeypatch.setattr(efficiency, "Path", self._MemoryPath)
+        efficiency.save_score({"total_score": 50, "grade": "D"}, 10000)
+        efficiency.save_score({"total_score": 60, "grade": "D"}, 12000)
+        history = efficiency.load_score_history()
+        assert len(history) == 1
+        assert history[0]["score"] == 60
+
+    def test_load_empty(self, monkeypatch):
+        from kulshan.checks.cost.analyzers import efficiency
+
+        monkeypatch.setattr(efficiency, "Path", self._MemoryPath)
+        assert efficiency.load_score_history() == []
+
+    def test_trend_insufficient_data(self, monkeypatch):
+        from kulshan.checks.cost.analyzers import efficiency
+
+        monkeypatch.setattr(efficiency, "Path", self._MemoryPath)
+        self._MemoryPath.content = "[]"
+        assert efficiency.get_score_trend() is None
