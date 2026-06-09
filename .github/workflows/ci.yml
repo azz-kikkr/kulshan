@@ -1,0 +1,114 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - '**'
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # TODO: Add mypy after the existing strict-mode errors and runtime are remediated.
+  lint:
+    name: Ruff
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: kulshan
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: kulshan/pyproject.toml
+
+      - name: Install project tooling
+        run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
+
+      # TODO: Expand to the full pyproject Ruff rules after the existing lint debt is baselined.
+      - name: Ruff fatal errors
+        run: python -m ruff check --select E9,F63,F7,F82 src tests
+
+  tests:
+    name: Test suite
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: kulshan
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: kulshan/pyproject.toml
+
+      - name: Install project and test tooling
+        run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
+
+      - run: python -m pytest
+
+  iam:
+    name: IAM policy consistency
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: kulshan
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: kulshan/pyproject.toml
+
+      - name: Install project and test tooling
+        run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
+
+      - run: python -m pytest tests/unit/test_iam_composition.py -q
+
+  package:
+    name: Build and install package
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: kulshan
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: kulshan/pyproject.toml
+
+      - name: Install build tooling
+        run: python -m pip install --upgrade pip build
+
+      - name: Build distributions
+        run: python -m build
+
+      - name: Install wheel
+        run: python -m pip install dist/*.whl
+
+      - name: Smoke test installed CLI
+        run: kulshan --version
+
+      - name: Upload tested distributions
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: kulshan/dist/
+          if-no-files-found: error
+          retention-days: 7

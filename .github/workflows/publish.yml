@@ -9,30 +9,11 @@ permissions:
   contents: read
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install build tools
-        run: pip install build
-
-      - name: Build package
-        working-directory: kulshan
-        run: python -m build
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: dist
-          path: kulshan/dist/
+  quality:
+    uses: ./.github/workflows/ci.yml
 
   publish:
-    needs: build
+    needs: quality
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
