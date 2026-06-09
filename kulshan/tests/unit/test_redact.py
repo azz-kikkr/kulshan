@@ -1,14 +1,13 @@
 """Unit tests for Kulshan.redact module."""
 from __future__ import annotations
 
-import pytest
-
 from kulshan.redact import (
     redact_account_id,
     redact_arn,
     redact_bucket_name,
     redact_email,
     redact_filename,
+    redact_hostname,
     redact_ip,
     redact_payload,
     redact_text,
@@ -98,7 +97,7 @@ class TestRedactBucketName:
         assert redact_bucket_name("my-production-data-bucket") == "my-p****"
 
     def test_short_name(self):
-        assert redact_bucket_name("ab") == "ab"
+        assert redact_bucket_name("ab") == "a****"
 
     def test_none(self):
         assert redact_bucket_name(None) == ""
@@ -123,6 +122,11 @@ class TestRedactText:
         result = redact_text(text)
         assert "admin@company.com" not in result
         assert "@" in result  # some masked form present
+
+    def test_inline_ip(self):
+        result = redact_text("Public endpoint 203.0.113.42 is exposed")
+        assert "203.0.113.42" not in result
+        assert "203.0.*.*" in result
 
     def test_none(self):
         assert redact_text(None) == ""
@@ -194,3 +198,68 @@ class TestRedactPayload:
         payload = {"kulshan_version": "0.1.0", "account_id": None, "resource_arn": None}
         result = redact_payload(payload)
         assert result["account_id"] == "XXXX-XXXX-XXXX"
+
+    def test_redacts_realistic_nested_network_and_storage_identifiers(self):
+        payload = {
+            "kulshan_version": "0.1.0",
+            "tools": {
+                "security": {
+                    "findings": [
+                        {
+                            "accountId": "123456789012",
+                            "bucket_name": "customer-production-exports",
+                            "public_ip": "203.0.113.42",
+                            "endpoint": "https://orders.prod.example.com:8443/health?verbose=1",
+                            "domain_name": "api.internal.example.org",
+                            "owner_hint": "platform-owner@example.com",
+                            "description": (
+                                "Contact platform-owner@example.com about 10.20.30.40 "
+                                "using key AKIAABCDEFGHIJKLMNOP"
+                            ),
+                        }
+                    ]
+                }
+            },
+        }
+
+        result = redact_payload(payload)
+        finding = result["tools"]["security"]["findings"][0]
+
+        serialized = str(result)
+        for leaked in (
+            "123456789012",
+            "customer-production-exports",
+            "203.0.113.42",
+            "orders.prod.example.com",
+            "api.internal.example.org",
+            "platform-owner@example.com",
+            "10.20.30.40",
+            "AKIAABCDEFGHIJKLMNOP",
+        ):
+            assert leaked not in serialized
+
+        assert finding["accountId"] == "XXXX-XXXX-9012"
+        assert finding["public_ip"] == "203.0.*.*"
+        assert finding["bucket_name"].endswith("****")
+        assert finding["endpoint"].startswith("https://or****.pr****.")
+        assert finding["endpoint"].endswith(":8443/health?verbose=1")
+        assert finding["domain_name"].endswith("example.org")
+
+    def test_preserves_report_usefulness(self):
+        payload = {
+            "region": "us-west-2",
+            "service": "Amazon RDS",
+            "severity": "high",
+            "estimated_monthly_impact": 420.5,
+        }
+        assert redact_payload(payload) == payload
+
+
+class TestRedactHostname:
+    def test_domain_preserves_suffix(self):
+        result = redact_hostname("orders.prod.example.com")
+        assert result == "or****.pr****.example.com"
+
+    def test_url_preserves_scheme_port_path_and_query(self):
+        result = redact_hostname("https://orders.prod.example.com:8443/health?verbose=1")
+        assert result == "https://or****.pr****.example.com:8443/health?verbose=1"

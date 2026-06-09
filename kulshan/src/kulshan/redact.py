@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import re
 from copy import deepcopy
-from typing import Any, Dict, List, Optional, Union
-
+from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 # ---------------------------------------------------------------------------
 # Patterns
@@ -29,7 +29,7 @@ _SECRET_KEY_RE = re.compile(r"\b[A-Za-z0-9/+=]{40}\b")  # AWS secret keys are 40
 # ---------------------------------------------------------------------------
 
 
-def redact_account_id(account_id: Optional[str]) -> str:
+def redact_account_id(account_id: str | None) -> str:
     """Redact AWS account ID to show only last 4 digits.
 
     '123456789012' -> 'XXXX-XXXX-9012'
@@ -42,7 +42,7 @@ def redact_account_id(account_id: Optional[str]) -> str:
     return "XXXX-XXXX-XXXX"
 
 
-def redact_arn(arn: Optional[str]) -> str:
+def redact_arn(arn: str | None) -> str:
     """Redact account ID portion of an ARN.
 
     'arn:aws:s3:::my-bucket' -> unchanged (no account)
@@ -52,13 +52,23 @@ def redact_arn(arn: Optional[str]) -> str:
         return ""
     s = str(arn)
     # Mask account ID in ARN
-    s = _ARN_RE.sub(lambda m: f"arn:aws:{_get_arn_service(m.group(0))}:{_get_arn_region(m.group(0))}:XXXX{m.group(1)[-4:]}:", s)
+    s = _ARN_RE.sub(
+        lambda m: (
+            f"arn:aws:{_get_arn_service(m.group(0))}:{_get_arn_region(m.group(0))}:"
+            f"XXXX{m.group(1)[-4:]}:"
+        ),
+        s,
+    )
     # Mask resource names after user/, role/, instance/
-    s = re.sub(r"(user|role|instance|function|bucket|table|cluster)/([^/\s]+)", _mask_resource_name, s)
+    s = re.sub(
+        r"(user|role|instance|function|bucket|table|cluster)/([^/\s]+)",
+        _mask_resource_name,
+        s,
+    )
     return s
 
 
-def redact_email(email: Optional[str]) -> str:
+def redact_email(email: str | None) -> str:
     """Redact email address preserving first char and domain TLD.
 
     'yuvdeep@example.com' -> 'y***@***.com'
@@ -75,7 +85,7 @@ def redact_email(email: Optional[str]) -> str:
     return f"{masked_local}@***.{tld}"
 
 
-def redact_ip(ip: Optional[str]) -> str:
+def redact_ip(ip: str | None) -> str:
     """Redact last two octets of an IP address.
 
     '10.0.45.12' -> '10.0.*.*'
@@ -88,7 +98,7 @@ def redact_ip(ip: Optional[str]) -> str:
     return f"{match.group(1)}.{match.group(2)}.*.*"
 
 
-def redact_bucket_name(name: Optional[str]) -> str:
+def redact_bucket_name(name: str | None) -> str:
     """Redact S3 bucket name showing first 4 chars.
 
     'my-production-data-bucket' -> 'my-p****'
@@ -96,12 +106,31 @@ def redact_bucket_name(name: Optional[str]) -> str:
     if not name:
         return ""
     s = str(name)
-    if len(s) <= 4:
-        return s
-    return s[:4] + "****"
+    visible = min(4, max(1, len(s) // 3))
+    return s[:visible] + "****"
 
 
-def redact_text(text: Optional[str]) -> str:
+def redact_hostname(hostname: str | None) -> str:
+    """Mask identifying hostname labels while preserving a useful suffix."""
+    if not hostname:
+        return ""
+
+    value = str(hostname)
+    if _IP_RE.fullmatch(value):
+        return redact_ip(value)
+
+    parsed = urlsplit(value)
+    if parsed.scheme and parsed.hostname:
+        masked_host = _mask_hostname_labels(parsed.hostname)
+        port = f":{parsed.port}" if parsed.port else ""
+        return urlunsplit(
+            (parsed.scheme, f"{masked_host}{port}", parsed.path, parsed.query, parsed.fragment)
+        )
+
+    return _mask_hostname_labels(value)
+
+
+def redact_text(text: str | None) -> str:
     """Scan free text for inline account IDs, emails, and AWS keys, redact them.
 
     Handles finding titles, descriptions, and recommended_action fields.
@@ -117,6 +146,8 @@ def redact_text(text: Optional[str]) -> str:
     s = _SECRET_KEY_RE.sub("[REDACTED_KEY]", s)
     # Replace emails
     s = _EMAIL_RE.sub(lambda m: redact_email(m.group(0)), s)
+    # Replace IPv4 addresses while retaining broad network context
+    s = _IP_RE.sub(lambda m: redact_ip(m.group(0)), s)
     return s
 
 
@@ -133,7 +164,7 @@ def redact_filename(filename: str) -> str:
 # ---------------------------------------------------------------------------
 
 # Fields that contain account IDs directly
-_ACCOUNT_FIELDS = {"account_id", "account", "accountId"}
+_ACCOUNT_FIELDS = {"account_id", "account", "accountid"}
 
 # Fields that contain free text with possible embedded PII
 _TEXT_FIELDS = {"title", "description", "recommended_action", "why_it_matters", "remediation_text"}
@@ -143,6 +174,19 @@ _ARN_FIELDS = {"resource_arn", "arn"}
 
 # Fields that contain email
 _EMAIL_FIELDS = {"email", "owner_hint"}
+
+# Fields containing network or storage identifiers
+_IP_FIELDS = {"ip", "ip_address", "public_ip", "private_ip", "source_ip", "destination_ip"}
+_BUCKET_FIELDS = {"bucket", "bucket_name", "s3_bucket", "bucketname"}
+_HOST_FIELDS = {
+    "host",
+    "hostname",
+    "endpoint",
+    "endpoint_url",
+    "domain",
+    "domain_name",
+    "dns_name",
+}
 
 
 def redact_payload(payload: Any, show_pii: bool = False) -> Any:
@@ -191,11 +235,17 @@ def _redact_string(value: str, key: str) -> str:
         return redact_arn(value)
     if key_lower in _EMAIL_FIELDS:
         return redact_email(value)
+    if key_lower in _IP_FIELDS:
+        return redact_ip(value)
+    if key_lower in _BUCKET_FIELDS:
+        return redact_bucket_name(value)
+    if key_lower in _HOST_FIELDS:
+        return redact_hostname(value)
     if key_lower in _TEXT_FIELDS:
         return redact_text(value)
 
-    # For any other string field, still scan for 12-digit account IDs
-    if _AWS_ACCOUNT_RE.search(value):
+    # For any other string field, scan common inline sensitive values.
+    if _AWS_ACCOUNT_RE.search(value) or _EMAIL_RE.search(value) or _ACCESS_KEY_RE.search(value):
         return redact_text(value)
 
     return value
@@ -225,3 +275,21 @@ def _mask_resource_name(match: re.Match) -> str:
     if len(name) <= 3:
         return f"{prefix}/****"
     return f"{prefix}/{name[:2]}****"
+
+
+def _mask_hostname_labels(hostname: str) -> str:
+    """Mask hostname labels but retain the final suffix for troubleshooting context."""
+    labels = hostname.rstrip(".").split(".")
+    if len(labels) == 1:
+        return _mask_identifier(labels[0])
+
+    suffix_count = 2 if len(labels) > 2 else 1
+    masked = [_mask_identifier(label) for label in labels[:-suffix_count]]
+    return ".".join(masked + labels[-suffix_count:])
+
+
+def _mask_identifier(value: str) -> str:
+    if not value:
+        return "****"
+    visible = min(2, len(value))
+    return value[:visible] + "****"
