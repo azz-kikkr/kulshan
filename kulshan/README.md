@@ -1,8 +1,8 @@
 # Kulshan
 
-**Free, open-source, read-only AWS audit CLI.**
+**Free, open-source AWS audit CLI with no infrastructure mutation or remediation.**
 
-Kulshan scans your AWS account across ten audit dimensions and produces a unified scored report. All AWS calls are read-only. Nothing leaves your machine.
+Kulshan scans your AWS account across ten audit dimensions and produces a unified scored report. Scanning and report generation are local-first by default.
 
 ## Install
 
@@ -36,12 +36,13 @@ Output formats: terminal (scored dashboard), JSON, HTML, SARIF, CSV.
 
 ## Trust & Security
 
-- **100% read-only** — 146 Get/List/Describe actions. Zero writes.
-- **No telemetry** — no outbound network calls, no SaaS, no signup
-- **No data egress** — everything runs locally, reports stay on your machine
+- **No infrastructure mutation** — no remediation or customer-resource changes
+- **Auditable permissions** — 147 explicit actions, including non-mutating `DetectStackDrift`
+- **Local-first by default** — no active telemetry implementation
+- **Explicit integrations** — optional webhooks send data only when deliberately invoked
 - **Published IAM policy** — inspect every action before granting access
 - **Open source** — Apache 2.0, read every line of code on GitHub
-- **PII redaction** — exported reports redact account IDs by default
+- **Sensitive-data masking** — common identifiers are masked by default; review reports before sharing
 
 ## AWS API Costs
 

@@ -10,7 +10,7 @@ Kulshan is free and open source. **AWS charges for Cost Explorer API calls only*
 |-----------|-------------------|-------------------|
 | `Kulshan Report --quick` | **$0.15 – $0.25** | Cost Explorer API only |
 | `Kulshan Report` (full) | **$0.20 – $0.40** | Cost Explorer API only |
-| Individual non-cost packs only | **$0.00** | All Get/List/Describe are free |
+| Individual non-cost packs only | **$0.00** | Resource inventory and assessment APIs used by these packs |
 
 ---
 
@@ -49,7 +49,7 @@ AWS charges **$0.01 per Cost Explorer API request**. Here's what Kulshan calls:
 | Limit | Service Quotas, EC2, IAM, RDS, CloudFormation | $0.00 |
 | Topo | EC2 (VPCs, subnets, route tables, flow logs, NAT gateways) | $0.00 |
 
-All Get, List, and Describe calls are covered by AWS free tier — no charges regardless of volume.
+The non-cost-pack APIs used here are not billed per request at the time of writing. `DetectStackDrift` is also non-mutating and is not a Cost Explorer API.
 
 ---
 

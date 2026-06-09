@@ -29,15 +29,16 @@ Include:
 
 ## Scope
 
-Kulshan is a read-only tool. It never writes to your AWS account.
-The IAM policies we provide contain only read actions (Describe, Get,
-List). If you find a code path that could trigger a write API call,
+Kulshan does not remediate or mutate customer infrastructure.
+The IAM policies primarily contain Describe, Get, and List actions, plus
+`cloudformation:DetectStackDrift`, which starts a non-mutating assessment.
+If you find a code path that could mutate AWS resources,
 that is a critical security issue and should be reported immediately.
 
 ## Security Design Principles
 
-1. **Read-only AWS access**: No write, create, delete, or modify API calls
+1. **Non-mutating AWS access**: No infrastructure remediation or resource changes
 2. **Local-only AI**: SLM inference runs on your machine, never in the cloud
-3. **Opt-in telemetry**: Anonymous usage metrics are disabled by default
+3. **Local-first defaults**: No telemetry implementation is active; optional integrations require explicit invocation
 4. **Offline license validation**: JWT verification uses a bundled public key
 5. **No credential storage**: Kulshan uses your existing AWS credential chain

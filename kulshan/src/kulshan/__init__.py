@@ -1,7 +1,7 @@
 """
 Kulshan: CLI for AWS cost, security, and waste analysis.
 
-Read-only audits. Zero data leaves your machine. Local-AI narratives planned.
+Local-first, non-mutating AWS audits. Optional integrations require explicit invocation.
 """
 
 from kulshan.__version__ import __version__

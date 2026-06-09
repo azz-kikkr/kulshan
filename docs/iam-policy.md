@@ -7,7 +7,7 @@
 | `kulshan/iam/kulshan-readonly.json` | Composed union of all pack policies (source of truth) |
 | `kulshan/iam/per-check/<key>.json` | Per-pack policies (10 files, one per pack) |
 
-The composed policy is the union of all per-check policies — 147 read-only actions across 30 AWS services. Every action is a Get, List, or Describe call. No write permissions.
+The composed policy is the exact union of all per-check policies: 147 non-mutating audit actions across 30 AWS services. Actions are primarily Get, List, and Describe calls. `cloudformation:DetectStackDrift` starts a drift assessment but does not change stack resources. The policy contains no remediation or infrastructure-mutation permissions.
 
 ## Website
 

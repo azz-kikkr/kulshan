@@ -2,7 +2,7 @@
 
 ## What Kulshan Is
 
-Kulshan is a local-first CLI that runs 10 AWS operational audits from a single command and scores your account across cost, security, waste, resilience, freshness, governance, monitoring, capacity, and architecture in one combined report. Zero data leaves your machine.
+Kulshan is a local-first CLI that runs 10 AWS operational audits from a single command and scores your account across cost, security, waste, resilience, freshness, governance, monitoring, capacity, and architecture in one combined report. Core scans and reports stay local unless the user explicitly invokes an external integration.
 
 ## Why It Exists
 
@@ -118,7 +118,7 @@ The reason: receipts beat prose. Every Kulshan finding already ships with the nu
 
 ## Design Principles
 
-1. **Local-first**: All processing on your machine. No SaaS backend, no telemetry, no third-party service in the runtime path. No data exfiltration.
+1. **Local-first**: Scans and reports run on your machine by default. Optional integrations may send selected data externally only when explicitly configured and invoked.
 2. **Receipts, not prose**: Every finding ships with the number, the query that produced it, the evidence, the opinion applied, and a remediation hint. Trust comes from showing the work, not from a narrative wrapper.
 3. **Opinionated defaults, escape hatches everywhere**: Works out of the box with zero config. Every default is overridable.
 4. **Show the money**: Every finding should have a dollar impact estimate where possible. Abstract severity levels are less motivating than "$1,300/month."

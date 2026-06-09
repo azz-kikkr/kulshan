@@ -1,6 +1,6 @@
 # Kulshan 🏔️
 
-**Free, open-source, read-only AWS audit CLI. The great white watcher.**
+**Free, open-source AWS audit CLI with no infrastructure mutation or remediation.**
 
 ```bash
 pipx install kulshan        # recommended (isolated)
@@ -20,7 +20,7 @@ kulshan report --quick      # scan your AWS account in under 5 minutes
 
 ## What It Does
 
-10 read-only audit packs. One command. One score. Nothing leaves your machine.
+10 non-mutating audit packs. One command. One score. Processing is local-first by default.
 
 ```
 $ kulshan report --quick
@@ -71,7 +71,7 @@ cd kulshan
 pip install -e kulshan
 ```
 
-Requires: Python 3.9+ and AWS credentials (read-only).
+Requires: Python 3.9+ and AWS credentials scoped to the published audit policy.
 
 ---
 
@@ -155,12 +155,12 @@ aws sts get-caller-identity
 | Approach | What to attach |
 |----------|---------------|
 | **Quickest** | AWS managed policies: `ViewOnlyAccess` + `SecurityAudit` + `AWSBillingReadOnlyAccess` |
-| **Minimal** | Our published policy: [`kulshan/iam/kulshan-readonly.json`](kulshan/iam/kulshan-readonly.json) (146 actions) |
+| **Minimal** | Our published policy: [`kulshan/iam/kulshan-readonly.json`](kulshan/iam/kulshan-readonly.json) (147 actions) |
 | **Per-pack** | Individual policies in [`kulshan/iam/per-check/`](kulshan/iam/per-check/) |
 
 ### Enterprise-safe setup (permissions boundary)
 
-For production AWS accounts, use the Kulshan policy as **both** the permission policy AND a [permissions boundary](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_boundaries.html). This guarantees the credentials can never exceed read-only access — even if someone attaches additional policies by mistake.
+For production AWS accounts, use the Kulshan policy as **both** the permission policy AND a [permissions boundary](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_boundaries.html). This limits the credentials to Kulshan's published non-mutating audit actions even if someone attaches additional policies by mistake.
 
 **Steps:**
 1. Go to **IAM → Policies → Create policy**
@@ -170,12 +170,12 @@ For production AWS accounts, use the Kulshan policy as **both** the permission p
 5. Attach `KulshanReadOnly` as the **permission policy**
 6. Also select `KulshanReadOnly` as the **permissions boundary**
 
-The boundary ensures: even if someone later attaches `AdministratorAccess` to this user, it can still only do the 146 read-only actions. Belt and suspenders.
+The boundary ensures that attaching `AdministratorAccess` later does not grant actions outside the 147-action Kulshan audit policy.
 
 ### What the policy contains
 
-- **146 actions** across 30 AWS services
-- **Only** these prefixes: `Get*`, `List*`, `Describe*`
+- **147 actions** across 30 AWS services
+- Primarily `Get*`, `List*`, and `Describe*`, plus non-mutating `cloudformation:DetectStackDrift`
 - **Zero** write actions: no `Put*`, `Create*`, `Update*`, `Delete*`, `Modify*`
 - Published, auditable, version-controlled: [`kulshan/iam/kulshan-readonly.json`](kulshan/iam/kulshan-readonly.json)
 
@@ -200,15 +200,16 @@ kulshan convert -i scan.json --format csv # Re-render without re-scanning
 
 | Guarantee | How to verify |
 |-----------|--------------|
-| **100% read-only** | Inspect the [IAM policy](kulshan/iam/kulshan-readonly.json) — 146 Get/List/Describe actions, zero writes |
-| **No telemetry** | Read the source — no outbound network calls, no analytics, no tracking |
-| **No data egress** | Reports stay on your machine. Nothing uploaded anywhere, ever |
+| **No infrastructure mutation** | Inspect the [IAM policy](kulshan/iam/kulshan-readonly.json): audit actions only; no remediation or resource mutation |
+| **Local-first by default** | Scans and reports run locally; no telemetry implementation is active |
+| **Explicit integrations** | Optional webhooks send selected data externally only when explicitly invoked with a destination URL |
 | **Open source** | Apache 2.0 — read every line of code right here on GitHub |
 | **Verifiable builds** | PyPI package built from this repo via GitHub Actions (tag → build → publish) |
-| **PII redaction** | Exported reports redact account IDs, ARNs, emails by default. HTML auto-saved after every scan is safe to share without review |
+| **Sensitive-data masking** | Common identifiers are masked by default; review every report before sharing |
 
-The published IAM policy contains **only** these action prefixes:
-`Get*`, `List*`, `Describe*`. No `Put*`, `Create*`, `Update*`, `Delete*`, `Modify*`.
+The policy primarily uses `Get*`, `List*`, and `Describe*` actions.
+`cloudformation:DetectStackDrift` starts a non-mutating assessment. The policy contains
+no `Put*`, `Create*`, `Update*`, `Delete*`, or `Modify*` actions.
 
 ---
 

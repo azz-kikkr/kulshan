@@ -32,7 +32,7 @@ A per-pack-only CLI (`Kulshan scan limit`) and the scaling-event planner are not
 
 ## Permissions
 
-Read-only. Key actions: `servicequotas:Get*`, `servicequotas:List*`, `cloudwatch:GetMetricStatistics`, plus service-specific Describe/List. Granular per-pack policy at [`kulshan/iam/per-check/limit.json`](../../kulshan/iam/per-check/limit.json).
+Non-mutating audit access. Key actions: `servicequotas:Get*`, `servicequotas:List*`, `cloudwatch:GetMetricStatistics`, plus service-specific Describe/List. Granular per-pack policy at [`kulshan/iam/per-check/limit.json`](../../kulshan/iam/per-check/limit.json).
 
 ## Cost
 

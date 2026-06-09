@@ -32,7 +32,7 @@ A per-pack-only CLI (e.g. `Kulshan scan <pack>`) is not exposed today: every che
 
 ## AWS permissions
 
-Kulshan is 100% read-only. Three options, in increasing precision:
+Kulshan does not remediate or mutate customer infrastructure. Three permission options, in increasing precision:
 
 - **Quickest:** attach the AWS managed `ViewOnlyAccess` + `SecurityAudit` policies to your IAM user/role.
 - **Composed minimal:** [`kulshan/iam/kulshan-readonly.json`](../kulshan/iam/kulshan-readonly.json): the union of every action used by all ten check packs.
@@ -58,6 +58,19 @@ For Cost Explorer specifically, also attach `AWSBillingReadOnlyAccess` or grant 
 - **Terminal**: Rich-formatted dashboard (default)
 - **HTML**: self-contained single-file report (`--format html --output report.html`)
 - **JSON**: machine-readable (`--format json --output report.json`)
+
+## Local history and retention
+
+Kulshan stores summary-only scan history in the platform-specific user data directory:
+
+- Linux: `~/.local/share/Kulshan/history.db`
+- macOS: `~/Library/Application Support/Kulshan/history.db`
+- Windows: `%LOCALAPPDATA%\\missionfinops\\Kulshan\\history.db`
+
+History older than 365 days is removed when a new scan is saved. Use `--no-history`
+to avoid retaining a scan, or `kulshan delete-history --yes` to delete all saved scans.
+The cost score trend file is stored beside the history database rather than in the
+current working directory.
 
 ## What's next
 
