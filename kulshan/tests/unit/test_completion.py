@@ -1,8 +1,6 @@
 """Tests for the Kulshan.completion module."""
 from __future__ import annotations
 
-import configparser
-from pathlib import Path
 from unittest.mock import patch
 
 import click
@@ -28,8 +26,6 @@ class TestGetAWSProfiles:
 
     def test_returns_profiles_from_mock_config(self, mock_aws_config, tmp_path):
         """Profiles written by the mock_aws_config fixture are discovered."""
-        aws_dir = mock_aws_config["config_path"].parent
-
         with patch("kulshan.completion.Path.home", return_value=tmp_path):
             profiles = get_aws_profiles()
 
@@ -80,7 +76,7 @@ class TestGenerateCompletionScript:
     def test_each_script_contains_complete_env_var(self):
         for shell in self.SHELLS:
             script = generate_completion_script("Kulshan", shell)
-            assert "_Kulshan_COMPLETE" in script, f"{shell} script missing env var"
+            assert "_KULSHAN_COMPLETE" in script, f"{shell} script missing env var"
 
     def test_each_script_contains_persistence_comment(self):
         for shell in self.SHELLS:

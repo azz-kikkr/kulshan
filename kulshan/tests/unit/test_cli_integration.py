@@ -35,7 +35,7 @@ class TestCLIRunner:
         assert result.exit_code == 0
         assert result.exception is None
 
-    def test_help_output_contains_Kulshan(self):
+    def test_help_output_contains_kulshan(self):
         runner = CliRunner()
         result = runner.invoke(main, ["--help"])
         assert "Kulshan" in result.output
@@ -50,25 +50,29 @@ class TestCLIRunner:
         runner = CliRunner()
         result = runner.invoke(main, ["setup-completion", "--shell", "bash"])
         assert result.exit_code == 0
-        assert "_Kulshan_COMPLETE" in result.output
+        assert "_KULSHAN_COMPLETE" in result.output
+        assert "=bash_source kulshan" in result.output
 
     def test_setup_completion_zsh(self):
         runner = CliRunner()
         result = runner.invoke(main, ["setup-completion", "--shell", "zsh"])
         assert result.exit_code == 0
-        assert "_Kulshan_COMPLETE" in result.output
+        assert "_KULSHAN_COMPLETE" in result.output
+        assert "=zsh_source kulshan" in result.output
 
     def test_setup_completion_fish(self):
         runner = CliRunner()
         result = runner.invoke(main, ["setup-completion", "--shell", "fish"])
         assert result.exit_code == 0
-        assert "_Kulshan_COMPLETE" in result.output
+        assert "_KULSHAN_COMPLETE" in result.output
+        assert "fish_source kulshan" in result.output
 
     def test_setup_completion_powershell(self):
         runner = CliRunner()
         result = runner.invoke(main, ["setup-completion", "--shell", "powershell"])
         assert result.exit_code == 0
-        assert "_Kulshan_COMPLETE" in result.output
+        assert "_KULSHAN_COMPLETE" in result.output
+        assert "powershell_source kulshan" in result.output
         assert "Invoke-Expression" in result.output
 
     def test_shell_help(self):

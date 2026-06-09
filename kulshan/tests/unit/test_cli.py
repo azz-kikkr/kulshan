@@ -26,6 +26,13 @@ class TestCLI:
         assert result.exit_code == 0
         assert "--quick" in result.output
         assert "--format" in result.output
+        assert "--no-history" in result.output
+
+    def test_delete_history_help(self):
+        runner = CliRunner()
+        result = runner.invoke(main, ["delete-history", "--help"])
+        assert result.exit_code == 0
+        assert "Permanently delete" in result.output
 
 
 class TestOrchestrator:
@@ -53,13 +60,14 @@ class TestOrchestrator:
         assert 0 <= score <= 100
         assert grade in ("A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D", "F")
 
-    def test_compute_overall_skips_skipped(self):
+    def test_compute_overall_withholds_score_when_pack_skipped(self):
         results = {
             "cost": {"scores": {"overall_score": 90}, "errors": []},
             "security": {"scores": {"overall_score": 0}, "errors": ["x"], "skipped": True},
         }
         score, _ = compute_overall(results)
-        assert score == 90
+        assert score == 0
+        assert _ == "N/A"
 
 
 class TestSession:

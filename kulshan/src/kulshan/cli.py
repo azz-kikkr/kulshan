@@ -58,6 +58,7 @@ def _emit_output(
     duration: float,
     top_actions: list,
     all_findings: list,
+    scan_metadata: dict,
     output: Optional[str],
     show_pii: bool,
     console: Console,
@@ -97,6 +98,7 @@ def _emit_output(
             "duration_seconds": round(duration, 1),
             "overall_score": overall_score,
             "overall_grade": overall_grade,
+            "scan_metadata": scan_metadata,
             "tools": results,
             "findings": all_findings,
             "top_actions": top_actions,
@@ -162,7 +164,7 @@ def main(ctx: click.Context, profile: Optional[str], role_arn: Optional[str]) ->
         c.print()
         c.print(Panel.fit(
             "[bold]Kulshan[/bold] — Operations Intelligence from your terminal.\n"
-            "Free, open-source, read-only AWS audit CLI.\n\n"
+            "Free, open-source, non-mutating AWS audit CLI.\n\n"
             "[dim]Quick start:[/dim]\n"
             "  [green]kulshan report --quick[/green]        Quick scan (3 regions)\n"
             "  [green]kulshan report --format html -o r.html[/green]  HTML report\n"
@@ -187,8 +189,9 @@ def main(ctx: click.Context, profile: Optional[str], role_arn: Optional[str]) ->
 @click.option("--show-pii", is_flag=True, default=False, help="Show full account IDs and PII in exported reports.")
 @click.option("--yes", "-y", is_flag=True, default=False, help="Skip the API cost notice (for CI/CD).")
 @click.option("--packs", default=None, help="Packs to run: cost,security,sweep,dr,age,drift,tag,pulse,limit,topo. Default: all.")
+@click.option("--no-history", is_flag=True, help="Do not retain this scan in local history.")
 @click.pass_context
-def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], days: int, show_pii: bool, yes: bool, packs: Optional[str]) -> None:
+def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], days: int, show_pii: bool, yes: bool, packs: Optional[str], no_history: bool) -> None:
     """Run all operational audits and display a combined report."""
     from kulshan.orchestrator import compute_overall, run_all_scans
     from kulshan.session import create_session, get_account_id, get_enabled_regions
@@ -251,7 +254,15 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
     )
     duration = time.time() - start
 
+    from kulshan.orchestrator import summarize_completeness
+
+    scan_metadata = summarize_completeness(results)
     overall_score, overall_grade = compute_overall(results)
+    if scan_metadata["partial"]:
+        console.print(
+            "[yellow bold]Partial scan:[/yellow bold] overall score withheld because "
+            "one or more requested checks were skipped or reported errors."
+        )
 
     # Phase 6C-1: top-level ranked findings + actions for buyer-grade output.
     from kulshan.findings_ranker import flatten_findings, top_n
@@ -263,30 +274,33 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
     from kulshan.remediation import enrich_findings
     enrich_findings(all_findings)
 
-    # Save to local history
-    try:
-        from kulshan.history import HistoryStore
-        history = HistoryStore()
-        history.save_scan(
-            account_id=account_id,
-            regions=regions,
-            duration_seconds=duration,
-            overall_score=overall_score,
-            overall_grade=overall_grade,
-            results=results,
-            findings=all_findings,
-            version=__version__,
-        )
-        history.close()
-    except Exception:
-        pass  # History is best-effort, never block the report
+    if not no_history:
+        try:
+            from kulshan.history import HistoryStore
+
+            history = HistoryStore()
+            history.purge_old(retention_days=365)
+            history.save_scan(
+                account_id=account_id,
+                regions=regions,
+                duration_seconds=duration,
+                overall_score=overall_score,
+                overall_grade=overall_grade,
+                results=results,
+                findings=all_findings,
+                version=__version__,
+                store_full_result=False,
+            )
+            history.close()
+        except Exception:
+            pass  # History is best-effort, never block the report
 
     _emit_output(
         fmt=fmt, results=results, overall_score=overall_score,
         overall_grade=overall_grade, account_id=account_id,
         regions=regions, duration=duration, top_actions=top_actions,
         all_findings=all_findings, output=output, show_pii=show_pii,
-        console=console,
+        scan_metadata=scan_metadata, console=console,
     )
 
     # Auto-save HTML report (redacted by default) unless user already exported HTML
@@ -311,7 +325,10 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
         if not show_pii:
             html_filename = redact_filename(html_filename)
         _atomic_write(html_filename, html_str)
-        console.print(f"\n  [dim]Report saved: [bold]{html_filename}[/bold] (PII redacted, safe to share)[/dim]")
+        console.print(
+            f"\n  [dim]Report saved: [bold]{html_filename}[/bold] "
+            "(common identifiers masked; review before sharing)[/dim]"
+        )
         console.print(f"  [dim]Use --show-pii for full account IDs. Open in browser for interactive view.[/dim]")
 
     has_critical = any(
@@ -361,12 +378,15 @@ def convert(input_file: str, fmt: str, output: Optional[str], show_pii: bool) ->
         if isinstance(pack_result, dict):
             all_findings.extend(pack_result.get("findings", []))
 
+    from kulshan.orchestrator import summarize_completeness
+
+    scan_metadata = payload.get("scan_metadata") or summarize_completeness(results)
     _emit_output(
         fmt=fmt, results=results, overall_score=overall_score,
         overall_grade=overall_grade, account_id=account_id,
         regions=regions, duration=duration, top_actions=top_actions,
         all_findings=all_findings, output=output, show_pii=show_pii,
-        console=console,
+        scan_metadata=scan_metadata, console=console,
     )
 
 
@@ -479,6 +499,22 @@ def history(limit: int, show_pii: bool) -> None:
         )
 
     console.print(table)
+
+
+@main.command("delete-history")
+@click.option("--yes", is_flag=True, help="Delete without an interactive confirmation.")
+def delete_history(yes: bool) -> None:
+    """Permanently delete all locally stored scan history."""
+    from kulshan.history import HistoryStore, get_history_db_path
+
+    if not yes and not click.confirm("Delete all locally stored Kulshan scan history?"):
+        click.echo("History was not deleted.")
+        return
+
+    store = HistoryStore()
+    deleted = store.delete_all()
+    store.close()
+    click.echo(f"Deleted {deleted} scan(s) from {get_history_db_path()}")
 
 
 # -- Wire up tab completion, ? help, theming, and Rich help formatting --

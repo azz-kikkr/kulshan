@@ -8,25 +8,22 @@ Stores a summary of every scan in a local SQLite database. Enables:
 from __future__ import annotations
 
 import json
-import os
 import sqlite3
 import uuid
-from datetime import datetime, timezone
+from contextlib import suppress
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import platformdirs
-
 
 # ---------------------------------------------------------------------------
 # Database path resolution
 # ---------------------------------------------------------------------------
 
-def _default_db_path() -> str:
+def get_history_db_path() -> Path:
     """Return the default history database path (XDG-compliant)."""
-    data_dir = platformdirs.user_data_dir("Kulshan", "missionfinops")
-    os.makedirs(data_dir, mode=0o700, exist_ok=True)
-    return os.path.join(data_dir, "history.db")
+    return Path(platformdirs.user_data_dir("Kulshan", "missionfinops")) / "history.db"
 
 
 # ---------------------------------------------------------------------------
@@ -64,22 +61,21 @@ CREATE INDEX IF NOT EXISTS idx_scans_account ON scans(account_id);
 class HistoryStore:
     """SQLite-backed scan history store."""
 
-    def __init__(self, db_path: Optional[str] = None):
-        self.db_path = db_path or _default_db_path()
-        self._conn: Optional[sqlite3.Connection] = None
+    def __init__(self, db_path: str | Path | None = None):
+        self.db_path = Path(db_path) if db_path else get_history_db_path()
+        self._conn: sqlite3.Connection | None = None
 
     def _connect(self) -> sqlite3.Connection:
         if self._conn is None:
+            self.db_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
             self._conn = sqlite3.connect(self.db_path)
             self._conn.execute("PRAGMA journal_mode=WAL")
             self._conn.execute("PRAGMA foreign_keys=ON")
             self._conn.row_factory = sqlite3.Row
             self._conn.executescript(_SCHEMA)
             # Restrict file permissions to owner only
-            try:
-                os.chmod(self.db_path, 0o600)
-            except OSError:
-                pass  # Windows doesn't support chmod the same way
+            with suppress(OSError):
+                self.db_path.chmod(0o600)
         return self._conn
 
     def close(self):
@@ -90,14 +86,14 @@ class HistoryStore:
     def save_scan(
         self,
         account_id: str,
-        regions: List[str],
+        regions: list[str],
         duration_seconds: float,
         overall_score: int,
         overall_grade: str,
-        results: Dict[str, Any],
-        findings: List[dict],
+        results: dict[str, Any],
+        findings: list[dict],
         version: str = "",
-        store_full_result: bool = True,
+        store_full_result: bool = False,
     ) -> str:
         """Save a scan result to history. Returns the scan ID."""
         conn = self._connect()
@@ -147,7 +143,9 @@ class HistoryStore:
         conn.commit()
         return scan_id
 
-    def list_scans(self, limit: int = 20, account_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    def list_scans(
+        self, limit: int = 20, account_id: str | None = None
+    ) -> list[dict[str, Any]]:
         """List recent scans, newest first."""
         conn = self._connect()
         if account_id:
@@ -166,7 +164,7 @@ class HistoryStore:
             ).fetchall()
         return [dict(row) for row in rows]
 
-    def get_scan(self, scan_id: str) -> Optional[Dict[str, Any]]:
+    def get_scan(self, scan_id: str) -> dict[str, Any] | None:
         """Get a single scan by ID."""
         conn = self._connect()
         row = conn.execute("SELECT * FROM scans WHERE id = ?", (scan_id,)).fetchone()
@@ -174,7 +172,7 @@ class HistoryStore:
             return None
         return dict(row)
 
-    def get_previous_scan(self, account_id: str) -> Optional[Dict[str, Any]]:
+    def get_previous_scan(self, account_id: str) -> dict[str, Any] | None:
         """Get the most recent scan before the current one for delta comparison."""
         conn = self._connect()
         row = conn.execute(
@@ -185,7 +183,7 @@ class HistoryStore:
             return None
         return dict(row)
 
-    def compare_scans(self, current_id: str, previous_id: str) -> Dict[str, Any]:
+    def compare_scans(self, current_id: str, previous_id: str) -> dict[str, Any]:
         """Compare two scans and return the delta."""
         current = self.get_scan(current_id)
         previous = self.get_scan(previous_id)
@@ -195,7 +193,8 @@ class HistoryStore:
         return {
             "score_delta": (current["overall_score"] or 0) - (previous["overall_score"] or 0),
             "findings_delta": (current["total_findings"] or 0) - (previous["total_findings"] or 0),
-            "critical_delta": (current["critical_findings"] or 0) - (previous["critical_findings"] or 0),
+            "critical_delta": (current["critical_findings"] or 0)
+            - (previous["critical_findings"] or 0),
             "current": {
                 "id": current["id"],
                 "score": current["overall_score"],
@@ -212,10 +211,19 @@ class HistoryStore:
             },
         }
 
-    def purge_old(self, retention_days: int = 365):
+    def purge_old(self, retention_days: int = 365) -> int:
         """Delete scans older than retention_days."""
         conn = self._connect()
-        from datetime import timedelta
         cutoff = (datetime.now(timezone.utc) - timedelta(days=retention_days)).isoformat()
-        conn.execute("DELETE FROM scans WHERE timestamp < ?", (cutoff,))
+        cursor = conn.execute("DELETE FROM scans WHERE timestamp < ?", (cutoff,))
         conn.commit()
+        return cursor.rowcount
+
+    def delete_all(self) -> int:
+        """Delete every stored scan and return the number removed."""
+        conn = self._connect()
+        cursor = conn.execute("DELETE FROM scans")
+        conn.commit()
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        conn.execute("VACUUM")
+        return cursor.rowcount

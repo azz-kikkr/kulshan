@@ -5,6 +5,7 @@ import importlib
 import logging
 import concurrent.futures
 import time
+import re
 from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
@@ -223,6 +224,7 @@ def run_all_scans(
             # Validate findings and exclude invalid ones
             findings = results[tool_key].get("findings", [])
             valid_findings = []
+            invalid_findings = 0
             for idx, finding in enumerate(findings):
                 # Adapt legacy-shaped findings before validation
                 if _is_legacy_finding(finding):
@@ -232,11 +234,17 @@ def run_all_scans(
                 if is_valid:
                     valid_findings.append(finding)
                 else:
+                    invalid_findings += 1
                     logger.warning(
                         "Pack %s finding %d invalid: %s",
                         tool_key, idx, reason,
                     )
             results[tool_key]["findings"] = valid_findings
+            if invalid_findings:
+                results[tool_key].setdefault("errors", []).append(
+                    f"Excluded {invalid_findings} invalid finding(s)"
+                )
+            _annotate_completeness(results[tool_key])
 
             # --- Update live severity tally ---
             for f in valid_findings:
@@ -284,6 +292,10 @@ def run_all_scans(
 
 
 def compute_overall(results: Dict[str, dict]) -> tuple[int, str]:
+    completeness = summarize_completeness(results)
+    if completeness["partial"]:
+        return 0, "N/A"
+
     total_weight = 0.0
     weighted_sum = 0.0
     for tool_key, result in results.items():
@@ -298,6 +310,64 @@ def compute_overall(results: Dict[str, dict]) -> tuple[int, str]:
     return overall, _grade(overall)
 
 
+def summarize_completeness(results: Dict[str, dict]) -> dict:
+    """Summarize whether every requested pack completed without reported errors."""
+    completed_checks = []
+    partial_checks = []
+    skipped_checks = []
+    failed_checks = []
+    missing_permissions = set()
+
+    for tool_key, result in results.items():
+        _annotate_completeness(result)
+        status = result["completeness"]
+        if status == "complete":
+            completed_checks.append(tool_key)
+        elif status == "skipped":
+            skipped_checks.append(tool_key)
+        else:
+            partial_checks.append(tool_key)
+
+        if result.get("errors"):
+            failed_checks.append(tool_key)
+        missing_permissions.update(result.get("missing_permissions", []))
+
+    incomplete = bool(partial_checks or skipped_checks)
+    return {
+        "partial": incomplete,
+        "status": "partial" if incomplete else "complete",
+        "completed_checks": completed_checks,
+        "partial_checks": partial_checks,
+        "skipped_checks": skipped_checks,
+        "failed_checks": failed_checks,
+        "missing_permissions": sorted(missing_permissions),
+    }
+
+
+def _annotate_completeness(result: dict) -> None:
+    errors = [str(error) for error in result.get("errors", []) if error]
+    result["errors"] = errors
+    result["missing_permissions"] = _extract_missing_permissions(errors)
+
+    if result.get("skipped"):
+        status = "skipped"
+    elif errors:
+        status = "partial"
+    else:
+        status = "complete"
+
+    result["completeness"] = status
+    result["partial"] = status != "complete"
+
+
+def _extract_missing_permissions(errors: List[str]) -> List[str]:
+    permission_errors = []
+    for error in errors:
+        if re.search(r"access.?denied|unauthori[sz]ed|not authorized|missing permission", error, re.I):
+            permission_errors.append(error)
+    return permission_errors
+
+
 def _load_check(tool_key: str):
     try:
         return importlib.import_module(f"kulshan.checks.{tool_key}")
@@ -306,7 +376,7 @@ def _load_check(tool_key: str):
 
 
 def _skip(tool_key: str, reason: str) -> dict:
-    return {
+    result = {
         "tool": tool_key,
         "scores": {
             "overall_score": 0, "grade": "N/A",
@@ -315,3 +385,5 @@ def _skip(tool_key: str, reason: str) -> dict:
         "errors": [reason],
         "skipped": True,
     }
+    _annotate_completeness(result)
+    return result
