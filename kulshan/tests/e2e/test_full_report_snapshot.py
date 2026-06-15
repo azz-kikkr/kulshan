@@ -289,7 +289,7 @@ class TestReportTerminalTopActions:
         """Score table must still render so old behavior is preserved."""
         result = self._run_terminal()
         assert "Cost Analyzer" in result.output  # one of the TOOL_LABELS values
-        assert "Overall Score" in result.output
+        assert "/100" in result.output  # overall score display
 
 
 class TestReportTerminalNoFindings:

@@ -1,0 +1,681 @@
+{
+  "kulshan_version": "0.1.0",
+  "account_id": "000000000000",
+  "regions": [
+    "us-east-1",
+    "us-west-2",
+    "eu-west-1"
+  ],
+  "duration_seconds": 12.4,
+  "overall_score": 77,
+  "overall_grade": "C+",
+  "tools": {
+    "cost": {
+      "tool": "cost",
+      "scores": {
+        "overall_score": 72,
+        "grade": "C-",
+        "total_findings": 3,
+        "severity_counts": {
+          "critical": 1,
+          "high": 1,
+          "medium": 1
+        },
+        "breakdown": {
+          "ri_coverage": 60,
+          "anomalies": 80,
+          "waste": 75
+        },
+        "total_spend": 12345.67
+      },
+      "findings": [
+        {
+          "id": "cost-anomaly_statistical-aaaaaaaaaaaaaaaa",
+          "pack": "cost",
+          "kind": "anomaly_statistical",
+          "fingerprint": "aaaaaaaaaaaaaaaa",
+          "title": "EC2 - Other spike, 78% in account 000000000000, 95% in us-east-1, 88% USE1-NatGateway-Bytes",
+          "severity": "critical",
+          "score_impact": -15,
+          "estimated_monthly_impact": 18712.5,
+          "confidence": 0.95,
+          "effort": "medium",
+          "risk": "safe",
+          "account": "000000000000",
+          "region": "us-east-1",
+          "service": "EC2 - Other",
+          "usage_type": "USE1-NatGateway-Bytes",
+          "operation": null,
+          "resource_id": null,
+          "evidence": {
+            "date": "2026-04-15",
+            "z_score": 4.1,
+            "methods": "Z:4.1\u03c3, IQR, MAD:5.2",
+            "num_methods": 3,
+            "overlap_with": [
+              "cost-anomaly_aws_native-bbbbbbbbbbbbbbbb"
+            ]
+          },
+          "why_it_matters": "Cost is 98% above baseline (z-score 4.1, methods: Z:4.1\u03c3, IQR, MAD:5.2).",
+          "recommended_action": "Investigate in account 000000000000, region us-east-1, usage type USE1-NatGateway-Bytes.",
+          "owner_hint": null
+        },
+        {
+          "id": "cost-anomaly_aws_native-bbbbbbbbbbbbbbbb",
+          "pack": "cost",
+          "kind": "anomaly_aws_native",
+          "fingerprint": "bbbbbbbbbbbbbbbb",
+          "title": "AWS-detected anomaly: EC2 - Other, in us-east-1, account 000000000000, $1,248 impact",
+          "severity": "high",
+          "score_impact": -10,
+          "estimated_monthly_impact": 18712.5,
+          "confidence": 0.95,
+          "effort": "medium",
+          "risk": "safe",
+          "account": "000000000000",
+          "region": "us-east-1",
+          "service": "EC2 - Other",
+          "usage_type": "USE1-NatGateway-Bytes",
+          "operation": null,
+          "resource_id": null,
+          "evidence": {
+            "source": "aws_cost_anomaly_detection",
+            "aws_anomaly_id": "AnomalyOverlap-0001",
+            "start_date": "2026-04-13",
+            "end_date": "2026-04-15",
+            "anomaly_days": 2,
+            "total_impact": 1247.5,
+            "max_impact": 891.0,
+            "total_actual": 2496.0,
+            "total_expected": 1248.5,
+            "feedback": "",
+            "overlap_with": [
+              "cost-anomaly_statistical-aaaaaaaaaaaaaaaa"
+            ]
+          },
+          "why_it_matters": "AWS Cost Anomaly Detection ML model flagged $2,496 actual vs $1,249 expected over 2026-04-13 to 2026-04-15.",
+          "recommended_action": "Verify in the AWS Cost Anomaly Detection console; AnomalyId: AnomalyOverlap-0001; mark feedback if expected.",
+          "owner_hint": null
+        },
+        {
+          "id": "cost-anomaly_statistical-cccccccccccccccc",
+          "pack": "cost",
+          "kind": "anomaly_statistical",
+          "fingerprint": "cccccccccccccccc",
+          "title": "Amazon RDS spike, 92% in eu-west-1",
+          "severity": "medium",
+          "score_impact": -5,
+          "estimated_monthly_impact": 1356.0,
+          "confidence": 0.8,
+          "effort": "medium",
+          "risk": "safe",
+          "account": null,
+          "region": "eu-west-1",
+          "service": "Amazon Relational Database Service",
+          "usage_type": null,
+          "operation": null,
+          "resource_id": null,
+          "evidence": {
+            "date": "2026-04-22",
+            "z_score": 2.6,
+            "methods": "Z:2.6\u03c3, IQR",
+            "num_methods": 2
+          },
+          "why_it_matters": "Cost is 100% above baseline (z-score 2.6, methods: Z:2.6\u03c3, IQR).",
+          "recommended_action": "Investigate Amazon RDS cost change; no single account drives it. Compare per-account spend over the anomaly window.",
+          "owner_hint": null
+        }
+      ],
+      "metadata": {
+        "cost_anomaly_detection": {
+          "status": "ok",
+          "anomaly_count": 1,
+          "lookback_days": 90,
+          "details": "",
+          "overlap": {
+            "both_count": 1,
+            "Kulshan_only_count": 1,
+            "aws_only_count": 0
+          }
+        },
+        "purchase_mix": {
+          "mix": [
+            {
+              "type": "On-Demand",
+              "cost": 7407.4,
+              "pct": 60.0
+            },
+            {
+              "type": "Savings Plans",
+              "cost": 3086.42,
+              "pct": 25.0
+            },
+            {
+              "type": "Reserved",
+              "cost": 1234.57,
+              "pct": 10.0
+            },
+            {
+              "type": "Spot",
+              "cost": 617.28,
+              "pct": 5.0
+            }
+          ],
+          "on_demand_pct": 60.0,
+          "committed_pct": 35.0,
+          "spot_pct": 5.0,
+          "total": 12345.67,
+          "assessment": "Moderate \u2014 significant on-demand exposure. Consider expanding Savings Plans coverage for EC2 and RDS."
+        },
+        "cost_velocity": {
+          "daily_avg": 411.52,
+          "velocity": 8.43,
+          "acceleration": 1.2,
+          "velocity_pct": 2.05,
+          "trend": "accelerating",
+          "warning": "Costs accelerating at 2.1%/day. Projected 30-day spend: $16,236 (vs $12,346 at current rate).",
+          "daily_costs": [
+            320.1,
+            335.4,
+            342.8,
+            355.2,
+            360.5,
+            372.9,
+            378.4,
+            385.6,
+            390.2,
+            398.7,
+            405.3,
+            410.8,
+            415.6,
+            420.3,
+            425.9,
+            430.1,
+            435.8,
+            440.2,
+            445.6,
+            450.3,
+            455.1,
+            460.8,
+            465.2,
+            470.5,
+            475.8,
+            480.3,
+            485.6,
+            490.2,
+            495.4,
+            500.1
+          ]
+        },
+        "hhi_concentration": {
+          "hhi": 2842,
+          "classification": "concentrated",
+          "top_services": [
+            {
+              "service": "Amazon EC2",
+              "pct": 42.0,
+              "cost": 5185.18
+            },
+            {
+              "service": "Amazon RDS",
+              "pct": 22.0,
+              "cost": 2716.05
+            },
+            {
+              "service": "Amazon S3",
+              "pct": 14.0,
+              "cost": 1728.39
+            },
+            {
+              "service": "AWS Lambda",
+              "pct": 8.0,
+              "cost": 987.65
+            },
+            {
+              "service": "Amazon CloudWatch",
+              "pct": 6.0,
+              "cost": 740.74
+            }
+          ],
+          "risk_assessment": "Highly concentrated: Amazon EC2 is 42% of spend. Consider diversification or negotiation leverage.",
+          "effective_services": 4
+        },
+        "executive_scorecard": {
+          "pillars": [
+            {
+              "name": "Cost Health",
+              "score": 60,
+              "grade": "D",
+              "icon": "\ud83d\udcb0",
+              "detail": "Velocity: +2.1%/day, 3 findings"
+            },
+            {
+              "name": "Commitment",
+              "score": 46,
+              "grade": "F",
+              "icon": "\ud83d\udccb",
+              "detail": "35% committed spend"
+            },
+            {
+              "name": "Efficiency",
+              "score": 60,
+              "grade": "D",
+              "icon": "\u26a1",
+              "detail": "60% on-demand exposure"
+            },
+            {
+              "name": "Risk",
+              "score": 55,
+              "grade": "F",
+              "icon": "\ud83d\udee1\ufe0f",
+              "detail": "HHI 2,842 (concentrated)"
+            }
+          ],
+          "composite_score": 56,
+          "composite_grade": "F",
+          "headline": "Significant optimization opportunities across multiple pillars."
+        }
+      },
+      "errors": [],
+      "missing_permissions": [],
+      "completeness": "complete",
+      "partial": false
+    },
+    "security": {
+      "tool": "security",
+      "scores": {
+        "overall_score": 65,
+        "grade": "D",
+        "total_findings": 14,
+        "severity_counts": {
+          "high": 4,
+          "medium": 7,
+          "low": 3
+        },
+        "breakdown": {
+          "iam": 50,
+          "network": 70,
+          "data": 65,
+          "compute": 80,
+          "logging": 55,
+          "encryption": 70
+        }
+      },
+      "errors": [],
+      "missing_permissions": [],
+      "completeness": "complete",
+      "partial": false
+    },
+    "sweep": {
+      "tool": "sweep",
+      "scores": {
+        "overall_score": 88,
+        "grade": "B+",
+        "total_findings": 6,
+        "severity_counts": {
+          "high": 1,
+          "medium": 3,
+          "low": 2
+        },
+        "breakdown": {
+          "compute": 92,
+          "network": 85,
+          "storage": 88,
+          "database": 90,
+          "monitoring": 85
+        },
+        "monthly_waste": 124.5
+      },
+      "errors": [],
+      "missing_permissions": [],
+      "completeness": "complete",
+      "partial": false
+    },
+    "dr": {
+      "tool": "dr",
+      "scores": {
+        "overall_score": 81,
+        "grade": "B-",
+        "total_findings": 4,
+        "severity_counts": {
+          "high": 1,
+          "medium": 3
+        },
+        "breakdown": {
+          "backup": 85,
+          "compute": 78,
+          "database": 82,
+          "storage": 80,
+          "dns": 75,
+          "spof": 86
+        }
+      },
+      "errors": [],
+      "missing_permissions": [],
+      "completeness": "complete",
+      "partial": false
+    },
+    "age": {
+      "tool": "age",
+      "scores": {
+        "overall_score": 77,
+        "grade": "C+",
+        "total_findings": 5,
+        "severity_counts": {
+          "medium": 4,
+          "low": 1
+        },
+        "breakdown": {
+          "lambda": 70,
+          "rds": 80,
+          "ec2": 75,
+          "acm": 85
+        }
+      },
+      "errors": [],
+      "missing_permissions": [],
+      "completeness": "complete",
+      "partial": false
+    },
+    "drift": {
+      "tool": "drift",
+      "scores": {
+        "overall_score": 90,
+        "grade": "A-",
+        "total_findings": 2,
+        "severity_counts": {
+          "medium": 2
+        },
+        "breakdown": {
+          "drift": 92,
+          "coverage": 88
+        }
+      },
+      "errors": [],
+      "missing_permissions": [],
+      "completeness": "complete",
+      "partial": false
+    },
+    "tag": {
+      "tool": "tag",
+      "scores": {
+        "overall_score": 55,
+        "grade": "F",
+        "total_findings": 47,
+        "severity_counts": {
+          "high": 12,
+          "medium": 35
+        },
+        "breakdown": {
+          "compliance": 40,
+          "consistency": 65,
+          "cost_attribution": 60
+        }
+      },
+      "errors": [],
+      "missing_permissions": [],
+      "completeness": "complete",
+      "partial": false
+    },
+    "pulse": {
+      "tool": "pulse",
+      "scores": {
+        "overall_score": 83,
+        "grade": "B",
+        "total_findings": 7,
+        "severity_counts": {
+          "high": 1,
+          "medium": 4,
+          "low": 2
+        },
+        "breakdown": {
+          "logging": 80,
+          "alarms": 88,
+          "tracing": 80
+        }
+      },
+      "errors": [],
+      "missing_permissions": [],
+      "completeness": "complete",
+      "partial": false
+    },
+    "limit": {
+      "tool": "limit",
+      "scores": {
+        "overall_score": 92,
+        "grade": "A",
+        "total_findings": 1,
+        "severity_counts": {
+          "high": 1
+        },
+        "breakdown": {
+          "ec2": 95,
+          "rds": 90,
+          "lambda": 92,
+          "vpc": 91
+        }
+      },
+      "errors": [],
+      "missing_permissions": [],
+      "completeness": "complete",
+      "partial": false
+    },
+    "topo": {
+      "tool": "topo",
+      "scores": {
+        "overall_score": 86,
+        "grade": "B+",
+        "total_findings": 3,
+        "severity_counts": {
+          "medium": 2,
+          "low": 1
+        },
+        "breakdown": {
+          "vpc_design": 88,
+          "subnet_layout": 84,
+          "peering": 86
+        }
+      },
+      "errors": [],
+      "missing_permissions": [],
+      "completeness": "complete",
+      "partial": false
+    }
+  },
+  "findings": [
+    {
+      "id": "cost-anomaly_statistical-aaaaaaaaaaaaaaaa",
+      "pack": "cost",
+      "kind": "anomaly_statistical",
+      "fingerprint": "aaaaaaaaaaaaaaaa",
+      "title": "EC2 - Other spike, 78% in account 000000000000, 95% in us-east-1, 88% USE1-NatGateway-Bytes",
+      "severity": "critical",
+      "score_impact": -15,
+      "estimated_monthly_impact": 18712.5,
+      "confidence": 0.95,
+      "effort": "medium",
+      "risk": "safe",
+      "account": "000000000000",
+      "region": "us-east-1",
+      "service": "EC2 - Other",
+      "usage_type": "USE1-NatGateway-Bytes",
+      "operation": null,
+      "resource_id": null,
+      "evidence": {
+        "date": "2026-04-15",
+        "z_score": 4.1,
+        "methods": "Z:4.1\u03c3, IQR, MAD:5.2",
+        "num_methods": 3,
+        "overlap_with": [
+          "cost-anomaly_aws_native-bbbbbbbbbbbbbbbb"
+        ]
+      },
+      "why_it_matters": "Cost is 98% above baseline (z-score 4.1, methods: Z:4.1\u03c3, IQR, MAD:5.2).",
+      "recommended_action": "Investigate in account 000000000000, region us-east-1, usage type USE1-NatGateway-Bytes.",
+      "owner_hint": null
+    },
+    {
+      "id": "cost-anomaly_aws_native-bbbbbbbbbbbbbbbb",
+      "pack": "cost",
+      "kind": "anomaly_aws_native",
+      "fingerprint": "bbbbbbbbbbbbbbbb",
+      "title": "AWS-detected anomaly: EC2 - Other, in us-east-1, account 000000000000, $1,248 impact",
+      "severity": "high",
+      "score_impact": -10,
+      "estimated_monthly_impact": 18712.5,
+      "confidence": 0.95,
+      "effort": "medium",
+      "risk": "safe",
+      "account": "000000000000",
+      "region": "us-east-1",
+      "service": "EC2 - Other",
+      "usage_type": "USE1-NatGateway-Bytes",
+      "operation": null,
+      "resource_id": null,
+      "evidence": {
+        "source": "aws_cost_anomaly_detection",
+        "aws_anomaly_id": "AnomalyOverlap-0001",
+        "start_date": "2026-04-13",
+        "end_date": "2026-04-15",
+        "anomaly_days": 2,
+        "total_impact": 1247.5,
+        "max_impact": 891.0,
+        "total_actual": 2496.0,
+        "total_expected": 1248.5,
+        "feedback": "",
+        "overlap_with": [
+          "cost-anomaly_statistical-aaaaaaaaaaaaaaaa"
+        ]
+      },
+      "why_it_matters": "AWS Cost Anomaly Detection ML model flagged $2,496 actual vs $1,249 expected over 2026-04-13 to 2026-04-15.",
+      "recommended_action": "Verify in the AWS Cost Anomaly Detection console; AnomalyId: AnomalyOverlap-0001; mark feedback if expected.",
+      "owner_hint": null
+    },
+    {
+      "id": "cost-anomaly_statistical-cccccccccccccccc",
+      "pack": "cost",
+      "kind": "anomaly_statistical",
+      "fingerprint": "cccccccccccccccc",
+      "title": "Amazon RDS spike, 92% in eu-west-1",
+      "severity": "medium",
+      "score_impact": -5,
+      "estimated_monthly_impact": 1356.0,
+      "confidence": 0.8,
+      "effort": "medium",
+      "risk": "safe",
+      "account": null,
+      "region": "eu-west-1",
+      "service": "Amazon Relational Database Service",
+      "usage_type": null,
+      "operation": null,
+      "resource_id": null,
+      "evidence": {
+        "date": "2026-04-22",
+        "z_score": 2.6,
+        "methods": "Z:2.6\u03c3, IQR",
+        "num_methods": 2
+      },
+      "why_it_matters": "Cost is 100% above baseline (z-score 2.6, methods: Z:2.6\u03c3, IQR).",
+      "recommended_action": "Investigate Amazon RDS cost change; no single account drives it. Compare per-account spend over the anomaly window.",
+      "owner_hint": null
+    }
+  ],
+  "top_actions": [
+    {
+      "id": "cost-anomaly_statistical-aaaaaaaaaaaaaaaa",
+      "pack": "cost",
+      "kind": "anomaly_statistical",
+      "fingerprint": "aaaaaaaaaaaaaaaa",
+      "title": "EC2 - Other spike, 78% in account 000000000000, 95% in us-east-1, 88% USE1-NatGateway-Bytes",
+      "severity": "critical",
+      "score_impact": -15,
+      "estimated_monthly_impact": 18712.5,
+      "confidence": 0.95,
+      "effort": "medium",
+      "risk": "safe",
+      "account": "000000000000",
+      "region": "us-east-1",
+      "service": "EC2 - Other",
+      "usage_type": "USE1-NatGateway-Bytes",
+      "operation": null,
+      "resource_id": null,
+      "evidence": {
+        "date": "2026-04-15",
+        "z_score": 4.1,
+        "methods": "Z:4.1\u03c3, IQR, MAD:5.2",
+        "num_methods": 3,
+        "overlap_with": [
+          "cost-anomaly_aws_native-bbbbbbbbbbbbbbbb"
+        ]
+      },
+      "why_it_matters": "Cost is 98% above baseline (z-score 4.1, methods: Z:4.1\u03c3, IQR, MAD:5.2).",
+      "recommended_action": "Investigate in account 000000000000, region us-east-1, usage type USE1-NatGateway-Bytes.",
+      "owner_hint": null
+    },
+    {
+      "id": "cost-anomaly_aws_native-bbbbbbbbbbbbbbbb",
+      "pack": "cost",
+      "kind": "anomaly_aws_native",
+      "fingerprint": "bbbbbbbbbbbbbbbb",
+      "title": "AWS-detected anomaly: EC2 - Other, in us-east-1, account 000000000000, $1,248 impact",
+      "severity": "high",
+      "score_impact": -10,
+      "estimated_monthly_impact": 18712.5,
+      "confidence": 0.95,
+      "effort": "medium",
+      "risk": "safe",
+      "account": "000000000000",
+      "region": "us-east-1",
+      "service": "EC2 - Other",
+      "usage_type": "USE1-NatGateway-Bytes",
+      "operation": null,
+      "resource_id": null,
+      "evidence": {
+        "source": "aws_cost_anomaly_detection",
+        "aws_anomaly_id": "AnomalyOverlap-0001",
+        "start_date": "2026-04-13",
+        "end_date": "2026-04-15",
+        "anomaly_days": 2,
+        "total_impact": 1247.5,
+        "max_impact": 891.0,
+        "total_actual": 2496.0,
+        "total_expected": 1248.5,
+        "feedback": "",
+        "overlap_with": [
+          "cost-anomaly_statistical-aaaaaaaaaaaaaaaa"
+        ]
+      },
+      "why_it_matters": "AWS Cost Anomaly Detection ML model flagged $2,496 actual vs $1,249 expected over 2026-04-13 to 2026-04-15.",
+      "recommended_action": "Verify in the AWS Cost Anomaly Detection console; AnomalyId: AnomalyOverlap-0001; mark feedback if expected.",
+      "owner_hint": null
+    },
+    {
+      "id": "cost-anomaly_statistical-cccccccccccccccc",
+      "pack": "cost",
+      "kind": "anomaly_statistical",
+      "fingerprint": "cccccccccccccccc",
+      "title": "Amazon RDS spike, 92% in eu-west-1",
+      "severity": "medium",
+      "score_impact": -5,
+      "estimated_monthly_impact": 1356.0,
+      "confidence": 0.8,
+      "effort": "medium",
+      "risk": "safe",
+      "account": null,
+      "region": "eu-west-1",
+      "service": "Amazon Relational Database Service",
+      "usage_type": null,
+      "operation": null,
+      "resource_id": null,
+      "evidence": {
+        "date": "2026-04-22",
+        "z_score": 2.6,
+        "methods": "Z:2.6\u03c3, IQR",
+        "num_methods": 2
+      },
+      "why_it_matters": "Cost is 100% above baseline (z-score 2.6, methods: Z:2.6\u03c3, IQR).",
+      "recommended_action": "Investigate Amazon RDS cost change; no single account drives it. Compare per-account spend over the anomaly window.",
+      "owner_hint": null
+    }
+  ]
+}

@@ -174,19 +174,26 @@ def render_report(
 
     # -- Header panel --
     title = Text()
-    title.append(f"Kulshan v{__version__}", style="bold cyan")
-    title.append("  Operations Intelligence", style="dim")
+    title.append("Kulshan", style="bold cyan")
+    title.append(f" v{__version__}", style="dim")
 
-    info = f"Account: {account_id}    Regions: {regions_count}    Duration: {duration_secs:.0f}s"
+    info = f"Account: {account_id}  │  Regions: {regions_count}  │  Duration: {duration_secs:.0f}s"
     console.print()
     console.print(Panel(info, title=title, border_style="cyan", padding=(0, 2)))
+
+    # -- Overall score (hero) --
+    g_clr = grade_color(overall_grade)
     console.print()
 
-    # -- Overall score --
-    g_clr = grade_color(overall_grade)
+    # Total spend from cost pack (if available)
+    cost_result = results.get("cost") or {}
+    total_spend = cost_result.get("scores", {}).get("total_spend")
+    spend_str = f"  │  [dim]Spend:[/dim] [bold]${total_spend:,.0f}[/bold]" if total_spend and total_spend > 0 else ""
+
     console.print(
-        f"  Overall Score: [{g_clr} bold]{overall_score}[/{g_clr} bold] / 100"
-        f"  [{g_clr}][{overall_grade}][/{g_clr}]"
+        f"  [{g_clr} bold]{overall_grade}[/{g_clr} bold]"
+        f"  [{g_clr}]{overall_score}/100[/{g_clr}]"
+        f"{spend_str}"
     )
 
     # Delta from last scan (from history)
@@ -284,10 +291,15 @@ def render_report(
         if not r.get("skipped")
     )
     if error_count:
-        console.print(f"  [dim]{error_count} non-fatal warnings during scan[/dim]")
+        console.print(f"  [dim]{error_count} non-fatal warnings during scan (use --format json for details)[/dim]")
         console.print()
 
-    # -- Hints --
-    console.print("  [dim]Export:  kulshan report --format json -o out.json[/dim]")
-    console.print("  [dim]Full:   kulshan report (all regions, without --quick)[/dim]")
+    # -- Next steps (contextual) --
+    console.print("  [dim]─── Next steps ───[/dim]")
+    if total_sev.get("critical", 0) > 0:
+        console.print("  [dim]Review critical findings above. Export: [green]kulshan report -o report.html[/green][/dim]")
+    elif total_sev.get("high", 0) > 0:
+        console.print("  [dim]Review high-severity findings. Share: [green]kulshan report -o report.html[/green][/dim]")
+    else:
+        console.print("  [dim]Looking good! Share with your team: [green]kulshan report -o report.html[/green][/dim]")
     console.print()

@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:;">
+<title>Kulshan Report</title>
+<style>
+:root {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f5f5f5;
+  --bg-card: #ffffff;
+  --text-primary: #212121;
+  --text-secondary: #616161;
+  --border-color: #e0e0e0;
+  --track-color: #e0e0e0;
+  --shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+  --shadow-hover: 0 4px 12px rgba(0,0,0,0.1);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not(.light-mode) {
+    --bg-primary: #121212;
+    --bg-secondary: #1e1e1e;
+    --bg-card: #252525;
+    --text-primary: #e0e0e0;
+    --text-secondary: #9e9e9e;
+    --border-color: #333333;
+    --track-color: #333333;
+    --shadow: 0 1px 3px rgba(0,0,0,0.4);
+    --shadow-hover: 0 4px 12px rgba(0,0,0,0.5);
+  }
+}
+.dark-mode {
+  --bg-primary: #121212;
+  --bg-secondary: #1e1e1e;
+  --bg-card: #252525;
+  --text-primary: #e0e0e0;
+  --text-secondary: #9e9e9e;
+  --border-color: #333333;
+  --track-color: #333333;
+  --shadow: 0 1px 3px rgba(0,0,0,0.4);
+  --shadow-hover: 0 4px 12px rgba(0,0,0,0.5);
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.5;
+  padding: 0;
+  margin: 0;
+}
+.container { max-width: 1100px; margin: 0 auto; padding: 24px 20px; }
+
+/* Header */
+.header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 20px 0; border-bottom: 2px solid var(--border-color); margin-bottom: 32px;
+}
+.header-brand h1 { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.02em; }
+.header-brand h1 span { color: #1565c0; }
+.header-meta { font-size: 0.82rem; color: var(--text-secondary); text-align: right; line-height: 1.7; }
+.theme-toggle {
+  background: var(--bg-secondary); border: 1px solid var(--border-color);
+  color: var(--text-primary); border-radius: 6px; padding: 6px 12px;
+  cursor: pointer; font-size: 0.82rem; margin-left: 12px;
+}
+.theme-toggle:hover { opacity: 0.8; }
+
+/* Hero */
+.hero { text-align: center; padding: 32px 0; }
+.hero-grade { font-size: 2.4rem; font-weight: 800; margin-top: 8px; }
+.hero-label { font-size: 0.9rem; color: var(--text-secondary); margin-top: 4px; }
+
+/* Section titles */
+.section-title {
+  font-size: 1.1rem; font-weight: 600; margin: 32px 0 16px;
+  padding-bottom: 8px; border-bottom: 1px solid var(--border-color);
+}
+
+/* Tool cards grid */
+.tool-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 16px; margin-bottom: 32px;
+}
+.tool-card {
+  background: var(--bg-card); border: 1px solid var(--border-color);
+  border-radius: 10px; padding: 16px; text-align: center;
+  box-shadow: var(--shadow); transition: box-shadow 0.2s;
+}
+.tool-card:hover { box-shadow: var(--shadow-hover); }
+.tool-card.skipped { opacity: 0.55; }
+.tool-icon { font-size: 1.6rem; margin-bottom: 4px; }
+.tool-name { font-size: 0.82rem; font-weight: 600; margin-bottom: 8px; color: var(--text-primary); }
+.tool-dial { margin: 0 auto 6px; }
+.tool-grade { font-size: 1.1rem; font-weight: 700; }
+.tool-findings { font-size: 0.75rem; color: var(--text-secondary); margin-top: 2px; }
+
+/* Severity badges */
+.severity-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 32px; }
+.sev-badge {
+  color: #fff; padding: 5px 14px; border-radius: 20px;
+  font-size: 0.82rem; font-weight: 600;
+}
+
+/* Tool details */
+.tool-detail {
+  background: var(--bg-card); border: 1px solid var(--border-color);
+  border-radius: 8px; margin-bottom: 10px; box-shadow: var(--shadow);
+}
+.tool-detail summary {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 16px; cursor: pointer; font-size: 0.92rem;
+  list-style: none; user-select: none;
+}
+.tool-detail summary::-webkit-details-marker { display: none; }
+.tool-detail summary::before {
+  content: '\25B6'; font-size: 0.7rem; transition: transform 0.2s;
+  color: var(--text-secondary);
+}
+.tool-detail[open] summary::before { transform: rotate(90deg); }
+.detail-icon { font-size: 1.1rem; }
+.detail-name { font-weight: 600; flex: 1; }
+.detail-grade { font-weight: 700; font-size: 0.95rem; }
+.detail-status { font-size: 0.82rem; color: var(--text-secondary); min-width: 60px; text-align: right; }
+.detail-body { padding: 0 16px 16px; }
+.detail-bar { margin-bottom: 12px; }
+.breakdown-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-bottom: 10px; }
+.breakdown-table th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border-color); color: var(--text-secondary); font-weight: 600; }
+.breakdown-table td { padding: 5px 8px; border-bottom: 1px solid var(--border-color); }
+.detail-label { min-width: 140px; }
+.detail-score { min-width: 40px; text-align: right; font-weight: 600; padding-right: 12px !important; }
+.error-list { background: var(--bg-secondary); border-radius: 6px; padding: 10px 14px; font-size: 0.82rem; }
+.error-list ul { margin: 4px 0 0 18px; }
+.error-list li { margin-bottom: 2px; }
+
+/* Footer */
+.footer {
+  text-align: center; padding: 24px 0; margin-top: 40px;
+  border-top: 1px solid var(--border-color);
+  font-size: 0.78rem; color: var(--text-secondary); line-height: 1.8;
+}
+
+/* Phase 6C-2: Top Actions table */
+.top-actions-table {
+  width: 100%; border-collapse: collapse; margin-bottom: 32px;
+  background: var(--bg-card); border: 1px solid var(--border-color);
+  border-radius: 8px; overflow: hidden; box-shadow: var(--shadow);
+  font-size: 0.88rem;
+}
+.top-actions-table thead th {
+  text-align: left; padding: 10px 12px; background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color); color: var(--text-secondary);
+  font-weight: 600; font-size: 0.74rem;
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.top-actions-table tbody td {
+  padding: 10px 12px; border-bottom: 1px solid var(--border-color);
+  vertical-align: top;
+}
+.top-actions-table tbody tr:last-child td { border-bottom: none; }
+.ta-rank { font-weight: 700; color: var(--text-secondary); width: 32px; }
+.ta-impact { font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 600; }
+.ta-conf { color: var(--text-secondary); white-space: nowrap; }
+.ta-source { color: var(--text-secondary); white-space: nowrap; }
+.ta-title { font-weight: 600; margin-bottom: 4px; line-height: 1.4; }
+.ta-rec { color: var(--text-secondary); font-size: 0.83rem; line-height: 1.4; }
+
+/* Compact severity pill (distinct from .sev-badge used in Severity Summary) */
+.sev-pill {
+  display: inline-block; color: #fff; padding: 2px 8px; border-radius: 4px;
+  font-size: 0.72rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap;
+}
+
+/* Cost findings cards */
+.cost-findings { margin-top: 16px; }
+.findings-subsection {
+  font-size: 0.95rem; font-weight: 600; margin: 18px 0 10px;
+  color: var(--text-primary);
+}
+.finding-cards { display: flex; flex-direction: column; gap: 10px; }
+.finding-card {
+  background: var(--bg-secondary); border: 1px solid var(--border-color);
+  border-radius: 6px; padding: 12px 14px;
+}
+.finding-head {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin-bottom: 6px; font-size: 0.82rem;
+}
+.finding-impact { font-weight: 700; font-variant-numeric: tabular-nums; }
+.finding-conf { color: var(--text-secondary); }
+.finding-title {
+  font-weight: 600; margin-bottom: 8px; line-height: 1.4; font-size: 0.92rem;
+}
+.finding-meta {
+  display: grid; grid-template-columns: max-content 1fr; gap: 2px 14px;
+  font-size: 0.82rem; margin-bottom: 8px;
+}
+.finding-meta dt { color: var(--text-secondary); }
+.finding-meta dd { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.finding-why { font-size: 0.85rem; margin-bottom: 6px; line-height: 1.5; }
+.finding-rec {
+  font-size: 0.85rem; padding: 8px 10px; background: var(--bg-card);
+  border-left: 3px solid #1565c0; border-radius: 3px; line-height: 1.5;
+  margin-bottom: 8px;
+}
+.finding-evidence { margin-top: 6px; font-size: 0.82rem; }
+.finding-evidence summary {
+  cursor: pointer; color: var(--text-secondary); padding: 4px 0; user-select: none;
+}
+.finding-evidence[open] summary { margin-bottom: 6px; }
+.evidence-table {
+  width: 100%; border-collapse: collapse; font-size: 0.8rem;
+  background: var(--bg-card); border: 1px solid var(--border-color);
+  border-radius: 4px; overflow: hidden;
+}
+.evidence-table th, .evidence-table td {
+  padding: 5px 8px; border-bottom: 1px solid var(--border-color);
+  text-align: left; vertical-align: top;
+}
+.evidence-table th {
+  background: var(--bg-secondary); color: var(--text-secondary);
+  font-weight: 600; min-width: 110px;
+}
+.evidence-table tr:last-child th, .evidence-table tr:last-child td {
+  border-bottom: none;
+}
+.findings-truncation {
+  font-size: 0.8rem; color: var(--text-secondary);
+  font-style: italic; margin-top: 8px;
+}
+
+/* AWS Cost Anomaly Detection overlap summary */
+.overlap-summary {
+  background: var(--bg-secondary); border: 1px solid var(--border-color);
+  border-radius: 6px; padding: 10px 14px; margin: 12px 0;
+  font-size: 0.85rem;
+}
+.overlap-status { margin-bottom: 4px; }
+.overlap-counts {
+  display: flex; gap: 16px; flex-wrap: wrap;
+  color: var(--text-secondary); font-size: 0.82rem;
+}
+.overlap-counts span { font-variant-numeric: tabular-nums; }
+.overlap-details { margin-top: 6px; font-size: 0.8rem; color: var(--text-secondary); }
+
+/* Synthetic-sample banner (opt-in via synthetic_sample=True) */
+.synthetic-banner {
+  background: #fff8e1;
+  border-bottom: 2px solid #f57f17;
+  padding: 14px 24px;
+  text-align: center;
+  color: #5d4037;
+  line-height: 1.5;
+}
+.synthetic-banner-title {
+  font-size: 0.95rem; margin-bottom: 4px;
+  letter-spacing: 0.02em;
+}
+.synthetic-banner-title strong { color: #e65100; }
+.synthetic-banner-body { font-size: 0.85rem; max-width: 760px; margin: 0 auto; }
+@media (prefers-color-scheme: dark) {
+  :root:not(.light-mode) .synthetic-banner {
+    background: #2d2418; border-bottom-color: #f57f17; color: #ffe0b2;
+  }
+}
+.dark-mode .synthetic-banner {
+  background: #2d2418; border-bottom-color: #f57f17; color: #ffe0b2;
+}
+
+/* Print */
+@media print {
+  body { background: #fff; color: #000; }
+  .theme-toggle { display: none; }
+  .tool-card { break-inside: avoid; box-shadow: none; border: 1px solid #ccc; }
+  .tool-detail { break-inside: avoid; box-shadow: none; }
+  .finding-card { break-inside: avoid; }
+  .top-actions-table tr { break-inside: avoid; }
+  .synthetic-banner { background: #fff8e1; color: #5d4037; }
+  .container { max-width: 100%; padding: 0; }
+  .footer { border-top: 1px solid #ccc; }
+}
+
+/* Commitment KPI */
+.commitment-kpi { margin-bottom: 32px; }
+.kpi-row {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 12px;
+  font-size: 0.88rem;
+}
+.kpi-label { min-width: 120px; font-weight: 600; color: var(--text-primary); }
+.kpi-bar-track {
+  flex: 1; height: 16px; background: var(--track-color);
+  border-radius: 8px; position: relative; overflow: visible;
+}
+.kpi-bar-fill {
+  height: 100%; border-radius: 8px; transition: width 0.3s;
+}
+.kpi-target-line {
+  position: absolute; top: -3px; width: 2px; height: 22px;
+  background: var(--text-secondary); opacity: 0.6;
+}
+.kpi-value { font-weight: 700; min-width: 50px; text-align: right; font-variant-numeric: tabular-nums; }
+.kpi-unused {
+  margin-top: 8px; padding: 8px 14px; background: var(--bg-secondary);
+  border-radius: 6px; font-size: 0.85rem; color: var(--text-secondary);
+}
+
+/* Money on Fire */
+.money-on-fire {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  border: 1px solid var(--border-color); border-radius: 12px;
+  padding: 28px 32px; margin-bottom: 32px; text-align: center;
+}
+.mof-hero { display: flex; align-items: center; justify-content: center; gap: 12px; }
+.mof-icon { font-size: 2.4rem; }
+.mof-total {
+  font-size: 2.8rem; font-weight: 800; color: #ff6b35;
+  font-variant-numeric: tabular-nums;
+}
+.mof-per { font-size: 1rem; font-weight: 400; color: var(--text-secondary); margin-left: 4px; }
+.mof-subtitle { font-size: 0.9rem; color: var(--text-secondary); margin-top: 8px; }
+.mof-breakdown {
+  display: flex; flex-direction: column; gap: 6px; margin-top: 16px;
+  max-width: 400px; margin-left: auto; margin-right: auto; text-align: left;
+}
+.mof-row { display: flex; justify-content: space-between; font-size: 0.85rem; }
+.mof-label { color: var(--text-secondary); }
+.mof-amount { font-weight: 600; color: #ff6b35; font-variant-numeric: tabular-nums; }
+
+/* Responsive */
+@media (max-width: 600px) {
+  .header { flex-direction: column; text-align: center; gap: 10px; }
+  .header-meta { text-align: center; }
+  .tool-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+}
+
+</style>
+</head>
+<body>
+<div class="synthetic-banner" role="note"><div class="synthetic-banner-title"><strong>Synthetic sample report</strong></div><div class="synthetic-banner-body">This report uses fixture data only. No customer data, no real AWS account IDs, and no live AWS environment were used.</div></div>
+<div class="container">
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-brand">
+      <h1><span>Kulshan</span> Report</h1>
+    </div>
+    <div class="header-meta">
+      Account: 000000000000<br>
+      Regions: 3 | Duration: 12.4s<br>
+      2026-04-30 12:00:00 UTC
+      <button class="theme-toggle" id="theme-toggle">Dark Mode</button>
+    </div>
+  </header>
+
+  <!-- Overall Score Hero -->
+  <section class="hero">
+    <svg width="180" height="180" viewBox="0 0 180 180" class="score-dial" aria-label="Score 77 out of 100"><circle cx="90.0" cy="90.0" r="72.0" fill="none" stroke="var(--track-color)" stroke-width="14.4" /><circle cx="90.0" cy="90.0" r="72.0" fill="none" stroke="#f57f17" stroke-width="14.4" stroke-dasharray="452.3893416" stroke-dashoffset="104.0" stroke-linecap="round" transform="rotate(-90 90.0 90.0)" /><text x="90.0" y="90.0" text-anchor="middle" dominant-baseline="central" class="dial-text" fill="var(--text-primary)" font-size="50.400000000000006px" font-weight="700">77</text></svg>
+    <div class="hero-grade" style="color:#f57f17">C+</div>
+    <div class="hero-label">Overall Operations Score</div>
+  </section>
+
+  <!-- Tool Scorecards -->
+  <h2 class="section-title">Tool Scores</h2>
+  <div class="tool-grid">
+    <div class="tool-card"><div class="tool-icon">💰</div><div class="tool-name">Cost Analyzer</div><div class="tool-dial"><svg width="90" height="90" viewBox="0 0 90 90" class="score-dial" aria-label="Score 72 out of 100"><circle cx="45.0" cy="45.0" r="36.0" fill="none" stroke="var(--track-color)" stroke-width="7.2" /><circle cx="45.0" cy="45.0" r="36.0" fill="none" stroke="#f57f17" stroke-width="7.2" stroke-dasharray="226.1946708" stroke-dashoffset="63.3" stroke-linecap="round" transform="rotate(-90 45.0 45.0)" /><text x="45.0" y="45.0" text-anchor="middle" dominant-baseline="central" class="dial-text" fill="var(--text-primary)" font-size="25.200000000000003px" font-weight="700">72</text></svg></div><div class="tool-grade" style="color:#f57f17">C-</div><div class="tool-findings">3 findings</div></div>
+<div class="tool-card"><div class="tool-icon">🛡️</div><div class="tool-name">Security Scanner</div><div class="tool-dial"><svg width="90" height="90" viewBox="0 0 90 90" class="score-dial" aria-label="Score 65 out of 100"><circle cx="45.0" cy="45.0" r="36.0" fill="none" stroke="var(--track-color)" stroke-width="7.2" /><circle cx="45.0" cy="45.0" r="36.0" fill="none" stroke="#e65100" stroke-width="7.2" stroke-dasharray="226.1946708" stroke-dashoffset="79.2" stroke-linecap="round" transform="rotate(-90 45.0 45.0)" /><text x="45.0" y="45.0" text-anchor="middle" dominant-baseline="central" class="dial-text" fill="var(--text-primary)" font-size="25.200000000000003px" font-weight="700">65</text></svg></div><div class="tool-grade" style="color:#e65100">D</div><div class="tool-findings">14 findings</div></div>
+<div class="tool-card"><div class="tool-icon">🧹</div><div class="tool-name">Waste Detector</div><div class="tool-dial"><svg width="90" height="90" viewBox="0 0 90 90" class="score-dial" aria-label="Score 88 out of 100"><circle cx="45.0" cy="45.0" r="36.0" fill="none" stroke="var(--track-color)" stroke-width="7.2" /><circle cx="45.0" cy="45.0" r="36.0" fill="none" stroke="#1565c0" stroke-width="7.2" stroke-dasharray="226.1946708" stroke-dashoffset="27.1" stroke-linecap="round" transform="rotate(-90 45.0 45.0)" /><text x="45.0" y="45.0" text-anchor="middle" dominant-baseline="central" class="dial-text" fill="var(--text-primary)" font-size="25.200000000000003px" font-weight="700">88</text></svg></div><div class="tool-grade" style="color:#1565c0">B+</div><div class="tool-findings">6 findings</div></div>
+<div class="tool-card"><div class="tool-icon">🚑</div><div class="tool-name">DR Readiness</div><div class="tool-dial"><svg width="90" height="90" viewBox="0 0 90 90" class="score-dial" aria-label="Score 81 out of 100"><circle cx="45.0" cy="45.0" r="36.0" fill="none" stroke="var(--track-color)" stroke-width="7.2" /><circle cx="45.0" cy="45.0" r="36.0" fill="none" stroke="#1565c0" stroke-width="7.2" stroke-dasharray="226.1946708" stroke-dashoffset="43.0" stroke-linecap="round" transform="rotate(-90 45.0 45.0)" /><text x="45.0" y="45.0" text-anchor="middle" dominant-baseline="central" class="dial-text" fill="var(--text-primary)" font-size="25.200000000000003px" font-weight="700">81</text></svg></div><div class="tool-grade" style="color:#1565c0">B-</div><div class="tool-findings">4 findings</div></div>
+<div class="tool-card"><div class="tool-icon">⏳</div><div class="tool-name">Lifecycle Audit</div><div class="tool-dial"><svg width="90" height="90" viewBox="0 0 90 90" class="score-dial" aria-label="Score 77 out of 100"><circle cx="45.0" cy="45.0" r="36.0" fill="none" stroke="var(--track-color)" stroke-width="7.2" /><circle cx="45.0" cy="45.0" r="36.0" fill="none" stroke="#f57f17" stroke-width="7.2" stroke-dasharray="226.1946708" stroke-dashoffset="52.0" stroke-linecap="round" transform="rotate(-90 45.0 45.0)" /><text x="45.0" y="45.0" text-anchor="middle" dominant-baseline="central" class="dial-text" fill="var(--text-primary)" font-size="25.200000000000003px" font-weight="700">77</text></svg></div><div class="tool-grade" style="color:#f57f17">C+</div><div class="tool-findings">5 findings</div></div>
+<div class="tool-card"><div class="tool-icon">🧭</div><div class="tool-name">IaC Drift</div><div class="tool-dial"><svg width="90" height="90" viewBox="0 0 90 90" class="score-dial" aria-label="Score 90 out of 100"><circle cx="45.0" cy="45.0" r="36.0" fill="none" stroke="var(--track-color)" stroke-width="7.2" /><circle cx="45.0" cy="45.0" r="36.0" fill="none" stroke="#2e7d32" stroke-width="7.2" stroke-dasharray="226.1946708" stroke-dashoffset="22.6" stroke-linecap="round" transform="rotate(-90 45.0 45.0)" /><text x="45.0" y="45.0" text-anchor="middle" dominant-baseline="central" class="dial-text" fill="var(--text-primary)" font-size="25.200000000000003px" font-weight="700">90</text></svg></div><div class="tool-grade" style="color:#2e7d32">A-</div><div class="tool-findings">2 findings</div></div>
+<div class="tool-card"><div class="tool-icon">🏷️</div><div class="tool-name">Tag Governance</div><div class="tool-dial"><svg width="90" height="90" viewBox="0 0 90 90" class="score-dial" aria-label="Score 55 out of 100"><circle cx="45.0" cy="45.0" r="36.0" fill="none" stroke="var(--track-color)" stroke-width="7.2" /><circle cx="45.0" cy="45.0" r="36.0" fill="none" stroke="#c62828" stroke-width="7.2" stroke-dasharray="226.1946708" stroke-dashoffset="101.8" stroke-linecap="round" transform="rotate(-90 45.0 45.0)" /><text x="45.0" y="45.0" text-anchor="middle" dominant-baseline="central" class="dial-text" fill="var(--text-primary)" font-size="25.200000000000003px" font-weight="700">55</text></svg></div><div class="tool-grade" style="color:#c62828">F</div><div class="tool-findings">47 findings</div></div>
+<div class="tool-card"><div class="tool-icon">💓</div><div class="tool-name">Observability</div><div class="tool-dial"><svg width="90" height="90" viewBox="0 0 90 90" class="score-dial" aria-label="Score 83 out of 100"><circle cx="45.0" cy="45.0" r="36.0" fill="none" stroke="var(--track-color)" stroke-width="7.2" /><circle cx="45.0" cy="45.0" r="36.0" fill="none" stroke="#1565c0" stroke-width="7.2" stroke-dasharray="226.1946708" stroke-dashoffset="38.5" stroke-linecap="round" transform="rotate(-90 45.0 45.0)" /><text x="45.0" y="45.0" text-anchor="middle" dominant-baseline="central" class="dial-text" fill="var(--text-primary)" font-size="25.200000000000003px" font-weight="700">83</text></svg></div><div class="tool-grade" style="color:#1565c0">B</div><div class="tool-findings">7 findings</div></div>
+<div class="tool-card"><div class="tool-icon">📊</div><div class="tool-name">Quota Headroom</div><div class="tool-dial"><svg width="90" height="90" viewBox="0 0 90 90" class="score-dial" aria-label="Score 92 out of 100"><circle cx="45.0" cy="45.0" r="36.0" fill="none" stroke="var(--track-color)" stroke-width="7.2" /><circle cx="45.0" cy="45.0" r="36.0" fill="none" stroke="#2e7d32" stroke-width="7.2" stroke-dasharray="226.1946708" stroke-dashoffset="18.1" stroke-linecap="round" transform="rotate(-90 45.0 45.0)" /><text x="45.0" y="45.0" text-anchor="middle" dominant-baseline="central" class="dial-text" fill="var(--text-primary)" font-size="25.200000000000003px" font-weight="700">92</text></svg></div><div class="tool-grade" style="color:#2e7d32">A</div><div class="tool-findings">1 finding</div></div>
+<div class="tool-card"><div class="tool-icon">🌐</div><div class="tool-name">Network Topology</div><div class="tool-dial"><svg width="90" height="90" viewBox="0 0 90 90" class="score-dial" aria-label="Score 86 out of 100"><circle cx="45.0" cy="45.0" r="36.0" fill="none" stroke="var(--track-color)" stroke-width="7.2" /><circle cx="45.0" cy="45.0" r="36.0" fill="none" stroke="#1565c0" stroke-width="7.2" stroke-dasharray="226.1946708" stroke-dashoffset="31.7" stroke-linecap="round" transform="rotate(-90 45.0 45.0)" /><text x="45.0" y="45.0" text-anchor="middle" dominant-baseline="central" class="dial-text" fill="var(--text-primary)" font-size="25.200000000000003px" font-weight="700">86</text></svg></div><div class="tool-grade" style="color:#1565c0">B+</div><div class="tool-findings">3 findings</div></div>
+  </div>
+
+  <!-- Severity Summary -->
+  <h2 class="section-title">Severity Summary</h2>
+  <div class="severity-row">
+    <span class="sev-badge" style="background:#c62828">Critical: 1</span>
+<span class="sev-badge" style="background:#e65100">High: 21</span>
+<span class="sev-badge" style="background:#f57f17">Medium: 61</span>
+<span class="sev-badge" style="background:#9e9e9e">Low: 9</span>
+  </div>
+
+  <!-- Top Actions (Phase 6C-2; renders empty string when no findings) -->
+  <h2 class="section-title">Top Actions</h2>
+<table class="top-actions-table">
+<thead><tr><th>#</th><th>Severity</th><th>Monthly impact</th><th>Confidence</th><th>Source</th><th>Action</th></tr></thead>
+<tbody>
+<tr class="ta-row"><td class="ta-rank">1</td><td><span class="sev-pill" style="background:#c62828">Critical</span></td><td class="ta-impact">$18,712.50</td><td class="ta-conf">95%</td><td class="ta-source">Kulshan</td><td><div class="ta-title">EC2 - Other spike, 78% in account 000000000000, 95% in us-east-1, 88% USE1-NatGateway-Bytes</div><div class="ta-rec">Investigate in account 000000000000, region us-east-1, usage type USE1-NatGateway-Bytes.</div></td></tr>
+<tr class="ta-row"><td class="ta-rank">2</td><td><span class="sev-pill" style="background:#e65100">High</span></td><td class="ta-impact">$18,712.50</td><td class="ta-conf">95%</td><td class="ta-source">AWS</td><td><div class="ta-title">AWS-detected anomaly: EC2 - Other, in us-east-1, account 000000000000, $1,248 impact</div><div class="ta-rec">Verify in the AWS Cost Anomaly Detection console; AnomalyId: AnomalyOverlap-0001; mark feedback if expected.</div></td></tr>
+<tr class="ta-row"><td class="ta-rank">3</td><td><span class="sev-pill" style="background:#f57f17">Medium</span></td><td class="ta-impact">$1,356.00</td><td class="ta-conf">80%</td><td class="ta-source">Kulshan</td><td><div class="ta-title">Amazon RDS spike, 92% in eu-west-1</div><div class="ta-rec">Investigate Amazon RDS cost change; no single account drives it. Compare per-account spend over the anomaly window.</div></td></tr>
+</tbody>
+</table>
+
+  <!-- Commitment KPIs -->
+  
+
+  <!-- Money on Fire (total addressable savings) -->
+  <div class="money-on-fire">
+<div class="mof-hero"><span class="mof-icon">🔥</span><span class="mof-total">$38,906<span class="mof-per">/month</span></span></div>
+<div class="mof-subtitle">Total addressable savings identified</div>
+<div class="mof-breakdown"><div class="mof-row"><span class="mof-label">Cost anomalies &amp; rightsizing</span><span class="mof-amount">$38,781/mo</span></div>
+<div class="mof-row"><span class="mof-label">Orphaned resources</span><span class="mof-amount">$124/mo</span></div></div>
+</div>
+
+  <!-- Per-Tool Details -->
+  <h2 class="section-title">Detailed Results</h2>
+  <details class="tool-detail"><summary><span class="detail-icon">💰</span><span class="detail-name">Cost Analyzer</span><span class="detail-grade" style="color:#f57f17">C-</span><span class="detail-status">72/100</span></summary><div class="detail-body"><div class="detail-bar"><svg width="300" height="14" aria-label="Score bar 72 percent"><rect x="0" y="0" width="300" height="14" rx="7" fill="var(--track-color)" /><rect x="0" y="0" width="216" height="14" rx="7" fill="#f57f17" /></svg></div><table class="breakdown-table"><thead><tr><th>Category</th><th>Score</th><th></th></tr></thead><tbody><tr><td class="detail-label">total_spend</td><td class="detail-score">12345.67</td><td><svg width="200" height="10" aria-label="Score bar 100 percent"><rect x="0" y="0" width="200" height="10" rx="5" fill="var(--track-color)" /><rect x="0" y="0" width="200" height="10" rx="5" fill="#2e7d32" /></svg></td></tr></tbody></table><div class="cost-findings">
+<div class="overlap-summary"><div class="overlap-status">AWS Cost Anomaly Detection: <strong>ok</strong> · 1 anomaly · 90-day lookback</div><div class="overlap-counts"><span class="ovc-both">1 confirmed by Kulshan</span><span class="ovc-reck">1 Kulshan-only</span><span class="ovc-aws">0 AWS-only</span></div></div>
+<h3 class="findings-subsection">Kulshan statistical anomalies</h3>
+<div class="finding-cards">
+<div class="finding-card"><div class="finding-head"><span class="sev-pill" style="background:#c62828">Critical</span><span class="finding-impact">$18,712.50/mo</span><span class="finding-conf">95% confidence</span></div><div class="finding-title">EC2 - Other spike, 78% in account 000000000000, 95% in us-east-1, 88% USE1-NatGateway-Bytes</div><dl class="finding-meta"><dt>Account</dt><dd>000000000000</dd><dt>Region</dt><dd>us-east-1</dd><dt>Service</dt><dd>EC2 - Other</dd><dt>Usage type</dt><dd>USE1-NatGateway-Bytes</dd></dl><p class="finding-why">Cost is 98% above baseline (z-score 4.1, methods: Z:4.1σ, IQR, MAD:5.2).</p><p class="finding-rec"><strong>Recommended:</strong> Investigate in account 000000000000, region us-east-1, usage type USE1-NatGateway-Bytes.</p><details class="finding-evidence"><summary>Evidence</summary><table class="evidence-table"><tr><th>date</th><td>2026-04-15</td></tr><tr><th>z_score</th><td>4.1</td></tr><tr><th>methods</th><td>Z:4.1σ, IQR, MAD:5.2</td></tr><tr><th>num_methods</th><td>3</td></tr><tr><th>overlap_with</th><td>cost-anomaly_aws_native-bbbbbbbbbbbbbbbb</td></tr></table></details></div>
+<div class="finding-card"><div class="finding-head"><span class="sev-pill" style="background:#f57f17">Medium</span><span class="finding-impact">$1,356.00/mo</span><span class="finding-conf">80% confidence</span></div><div class="finding-title">Amazon RDS spike, 92% in eu-west-1</div><dl class="finding-meta"><dt>Region</dt><dd>eu-west-1</dd><dt>Service</dt><dd>Amazon Relational Database Service</dd></dl><p class="finding-why">Cost is 100% above baseline (z-score 2.6, methods: Z:2.6σ, IQR).</p><p class="finding-rec"><strong>Recommended:</strong> Investigate Amazon RDS cost change; no single account drives it. Compare per-account spend over the anomaly window.</p><details class="finding-evidence"><summary>Evidence</summary><table class="evidence-table"><tr><th>date</th><td>2026-04-22</td></tr><tr><th>z_score</th><td>2.6</td></tr><tr><th>methods</th><td>Z:2.6σ, IQR</td></tr><tr><th>num_methods</th><td>2</td></tr></table></details></div>
+</div>
+
+<h3 class="findings-subsection">AWS-native Cost Anomaly Detection</h3>
+<div class="finding-cards">
+<div class="finding-card"><div class="finding-head"><span class="sev-pill" style="background:#e65100">High</span><span class="finding-impact">$18,712.50/mo</span><span class="finding-conf">95% confidence</span></div><div class="finding-title">AWS-detected anomaly: EC2 - Other, in us-east-1, account 000000000000, $1,248 impact</div><dl class="finding-meta"><dt>Account</dt><dd>000000000000</dd><dt>Region</dt><dd>us-east-1</dd><dt>Service</dt><dd>EC2 - Other</dd><dt>Usage type</dt><dd>USE1-NatGateway-Bytes</dd></dl><p class="finding-why">AWS Cost Anomaly Detection ML model flagged $2,496 actual vs $1,249 expected over 2026-04-13 to 2026-04-15.</p><p class="finding-rec"><strong>Recommended:</strong> Verify in the AWS Cost Anomaly Detection console; AnomalyId: AnomalyOverlap-0001; mark feedback if expected.</p><details class="finding-evidence"><summary>Evidence</summary><table class="evidence-table"><tr><th>source</th><td>aws_cost_anomaly_detection</td></tr><tr><th>aws_anomaly_id</th><td>AnomalyOverlap-0001</td></tr><tr><th>start_date</th><td>2026-04-13</td></tr><tr><th>end_date</th><td>2026-04-15</td></tr><tr><th>anomaly_days</th><td>2</td></tr><tr><th>total_impact</th><td>1247.5</td></tr><tr><th>max_impact</th><td>891.0</td></tr><tr><th>total_actual</th><td>2496.0</td></tr><tr><th>total_expected</th><td>1248.5</td></tr><tr><th>overlap_with</th><td>cost-anomaly_statistical-aaaaaaaaaaaaaaaa</td></tr></table></details></div>
+</div>
+
+</div></div></details>
+<details class="tool-detail"><summary><span class="detail-icon">🛡️</span><span class="detail-name">Security Scanner</span><span class="detail-grade" style="color:#e65100">D</span><span class="detail-status">65/100</span></summary><div class="detail-body"><div class="detail-bar"><svg width="300" height="14" aria-label="Score bar 65 percent"><rect x="0" y="0" width="300" height="14" rx="7" fill="var(--track-color)" /><rect x="0" y="0" width="195" height="14" rx="7" fill="#e65100" /></svg></div></div></details>
+<details class="tool-detail"><summary><span class="detail-icon">🧹</span><span class="detail-name">Waste Detector</span><span class="detail-grade" style="color:#1565c0">B+</span><span class="detail-status">88/100</span></summary><div class="detail-body"><div class="detail-bar"><svg width="300" height="14" aria-label="Score bar 88 percent"><rect x="0" y="0" width="300" height="14" rx="7" fill="var(--track-color)" /><rect x="0" y="0" width="264" height="14" rx="7" fill="#1565c0" /></svg></div><table class="breakdown-table"><thead><tr><th>Category</th><th>Score</th><th></th></tr></thead><tbody><tr><td class="detail-label">monthly_waste</td><td class="detail-score">124.5</td><td><svg width="200" height="10" aria-label="Score bar 100 percent"><rect x="0" y="0" width="200" height="10" rx="5" fill="var(--track-color)" /><rect x="0" y="0" width="200" height="10" rx="5" fill="#2e7d32" /></svg></td></tr></tbody></table></div></details>
+<details class="tool-detail"><summary><span class="detail-icon">🚑</span><span class="detail-name">DR Readiness</span><span class="detail-grade" style="color:#1565c0">B-</span><span class="detail-status">81/100</span></summary><div class="detail-body"><div class="detail-bar"><svg width="300" height="14" aria-label="Score bar 81 percent"><rect x="0" y="0" width="300" height="14" rx="7" fill="var(--track-color)" /><rect x="0" y="0" width="243" height="14" rx="7" fill="#1565c0" /></svg></div></div></details>
+<details class="tool-detail"><summary><span class="detail-icon">⏳</span><span class="detail-name">Lifecycle Audit</span><span class="detail-grade" style="color:#f57f17">C+</span><span class="detail-status">77/100</span></summary><div class="detail-body"><div class="detail-bar"><svg width="300" height="14" aria-label="Score bar 77 percent"><rect x="0" y="0" width="300" height="14" rx="7" fill="var(--track-color)" /><rect x="0" y="0" width="231" height="14" rx="7" fill="#f57f17" /></svg></div></div></details>
+<details class="tool-detail"><summary><span class="detail-icon">🧭</span><span class="detail-name">IaC Drift</span><span class="detail-grade" style="color:#2e7d32">A-</span><span class="detail-status">90/100</span></summary><div class="detail-body"><div class="detail-bar"><svg width="300" height="14" aria-label="Score bar 90 percent"><rect x="0" y="0" width="300" height="14" rx="7" fill="var(--track-color)" /><rect x="0" y="0" width="270" height="14" rx="7" fill="#2e7d32" /></svg></div></div></details>
+<details class="tool-detail"><summary><span class="detail-icon">🏷️</span><span class="detail-name">Tag Governance</span><span class="detail-grade" style="color:#c62828">F</span><span class="detail-status">55/100</span></summary><div class="detail-body"><div class="detail-bar"><svg width="300" height="14" aria-label="Score bar 55 percent"><rect x="0" y="0" width="300" height="14" rx="7" fill="var(--track-color)" /><rect x="0" y="0" width="165" height="14" rx="7" fill="#c62828" /></svg></div></div></details>
+<details class="tool-detail"><summary><span class="detail-icon">💓</span><span class="detail-name">Observability</span><span class="detail-grade" style="color:#1565c0">B</span><span class="detail-status">83/100</span></summary><div class="detail-body"><div class="detail-bar"><svg width="300" height="14" aria-label="Score bar 83 percent"><rect x="0" y="0" width="300" height="14" rx="7" fill="var(--track-color)" /><rect x="0" y="0" width="249" height="14" rx="7" fill="#1565c0" /></svg></div></div></details>
+<details class="tool-detail"><summary><span class="detail-icon">📊</span><span class="detail-name">Quota Headroom</span><span class="detail-grade" style="color:#2e7d32">A</span><span class="detail-status">92/100</span></summary><div class="detail-body"><div class="detail-bar"><svg width="300" height="14" aria-label="Score bar 92 percent"><rect x="0" y="0" width="300" height="14" rx="7" fill="var(--track-color)" /><rect x="0" y="0" width="276" height="14" rx="7" fill="#2e7d32" /></svg></div></div></details>
+<details class="tool-detail"><summary><span class="detail-icon">🌐</span><span class="detail-name">Network Topology</span><span class="detail-grade" style="color:#1565c0">B+</span><span class="detail-status">86/100</span></summary><div class="detail-body"><div class="detail-bar"><svg width="300" height="14" aria-label="Score bar 86 percent"><rect x="0" y="0" width="300" height="14" rx="7" fill="var(--track-color)" /><rect x="0" y="0" width="258" height="14" rx="7" fill="#1565c0" /></svg></div></div></details>
+
+  <!-- Footer -->
+  <footer class="footer">
+    Generated by Kulshan v0.1.0<br>
+    2026-04-30 12:00:00 UTC<br>
+    This report was generated locally. No data was sent to external services.
+  </footer>
+
+</div>
+<script>
+(function() {
+  var btn = document.getElementById('theme-toggle');
+  var root = document.documentElement;
+  function toggle() {
+    if (root.classList.contains('dark-mode')) {
+      root.classList.remove('dark-mode');
+      root.classList.add('light-mode');
+      btn.textContent = 'Dark Mode';
+    } else {
+      root.classList.remove('light-mode');
+      root.classList.add('dark-mode');
+      btn.textContent = 'Light Mode';
+    }
+  }
+  btn.addEventListener('click', toggle);
+})();
+
+</script>
+</body>
+</html>

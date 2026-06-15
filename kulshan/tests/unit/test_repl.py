@@ -52,7 +52,7 @@ class TestMakePromptText:
     def test_prompt_contains_Kulshan(self):
         prompt = make_prompt_text(supports_unicode=True)
         prompt_str = str(prompt)
-        assert "Kulshan" in prompt_str
+        assert "kulshan" in prompt_str.lower()
 
 
 class TestInjectContextArgs:

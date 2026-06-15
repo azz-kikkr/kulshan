@@ -12,7 +12,7 @@ class TestThemeRegistry:
     """Verify the THEME_REGISTRY contents."""
 
     EXPECTED_NAMES = {
-        "Kulshan",
+        "kulshan",
         "cost",
         "sweep",
         "tag",
@@ -48,17 +48,17 @@ class TestGetTheme:
         assert theme is THEME_REGISTRY["cost"]
         assert theme.primary == "cyan"
 
-    def test_returns_Kulshan_theme_for_each_known_name(self):
+    def test_returns_theme_for_each_known_name(self):
         for name in THEME_REGISTRY:
             assert get_theme(name) is THEME_REGISTRY[name]
 
-    def test_falls_back_to_Kulshan_for_unknown_name(self):
+    def test_falls_back_to_kulshan_for_unknown_name(self):
         theme = get_theme("nonexistent-tool")
-        assert theme is THEME_REGISTRY["Kulshan"]
+        assert theme is THEME_REGISTRY["kulshan"]
 
-    def test_falls_back_to_Kulshan_for_empty_string(self):
+    def test_falls_back_to_kulshan_for_empty_string(self):
         theme = get_theme("")
-        assert theme is THEME_REGISTRY["Kulshan"]
+        assert theme is THEME_REGISTRY["kulshan"]
 
 
 class TestRenderBanner:
@@ -74,7 +74,7 @@ class TestRenderBanner:
             tool_name="TestTool",
             tagline="A test tagline",
             version="0.0.1",
-            theme=get_theme("Kulshan"),
+            theme=get_theme("kulshan"),
         )
 
     def test_render_banner_output_contains_tool_name(self, capsys):
@@ -102,7 +102,7 @@ class TestRenderBanner:
             tool_name="MyTool",
             tagline="Does things",
             version="3.5.7",
-            theme=get_theme("Kulshan"),
+            theme=get_theme("kulshan"),
         )
         captured = capsys.readouterr().out
         assert "3.5.7" in captured
