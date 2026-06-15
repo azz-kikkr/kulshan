@@ -378,12 +378,18 @@ class CostFetcher:
         days: int = 90,
         metric: str = "UnblendedCost",
         service_filter: Optional[str] = None,
+        max_pages: int = 5,
     ) -> pd.DataFrame:
-        """Fetch daily costs grouped by service AND account for deep anomaly detection."""
+        """Fetch daily costs grouped by service AND account for deep anomaly detection.
+
+        Pagination is capped at ``max_pages`` to ensure consistent API cost
+        regardless of organization size (e.g. 1000-account orgs).
+        """
         start, end = self._date_range(days)
 
         results = []
         next_token = None
+        pages = 0
         while True:
             kwargs = dict(
                 TimePeriod={"Start": start, "End": end},
@@ -403,7 +409,8 @@ class CostFetcher:
             resp = self._ce_call("get_cost_and_usage", **kwargs)
             results.extend(resp["ResultsByTime"])
             next_token = resp.get("NextPageToken")
-            if not next_token:
+            pages += 1
+            if not next_token or pages >= max_pages:
                 break
 
         rows = []

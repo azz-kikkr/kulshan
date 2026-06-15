@@ -170,7 +170,7 @@ Explicitly deferred (no committed date):
 
 Not on this list:
 
-- Open-sourcing the codebase. The proprietary license stays. The IAM policy file at `iam/Kulshan-readonly.json` is published separately under CC BY 4.0 (visible at https://missionfinops.com/policy/).
+- Multi-cloud support. AWS only.
 
 ---
 
