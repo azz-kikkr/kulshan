@@ -100,55 +100,58 @@ kulshan doctor          # Check AWS readiness (no cost, no writes)
 
 ## AWS Credentials
 
-Kulshan uses the same credential chain as the AWS CLI. If `aws sts get-caller-identity` works in your terminal, Kulshan will work too.
+### Recommended: Use AWS CLI v2 with your normal console login
 
-### Quickest: Use your existing AWS CLI configuration
-
-If you already have the AWS CLI configured (via `aws configure`, SSO, or `aws login`), just run:
+Install the [AWS CLI v2](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) and log in the same way you access the AWS Console. Kulshan uses the same credential chain — if `aws sts get-caller-identity` works, Kulshan works.
 
 ```bash
-kulshan report --quick
+# Log in with your browser (AWS CLI v2.22+, no access keys needed)
+aws sso login
+
+# Then just run Kulshan — it picks up your session automatically
+kulshan doctor            # Shows what your current access enables
+kulshan report --quick    # Runs whatever packs your permissions allow
 ```
 
-No additional setup needed. Kulshan picks up whatever credentials the AWS CLI uses.
+**You don't need the full Kulshan IAM policy to try it.** Run `kulshan doctor` to see exactly what works with your current access. Packs that need permissions you don't have will be skipped — the report still runs with whatever you've got.
 
-### Authenticate via browser (`aws login`)
+### All authentication methods
 
-Requires AWS CLI v2.32+. No access keys needed — uses short-lived temporary credentials.
+| Method | Command | Best for |
+|--------|---------|----------|
+| **SSO / Identity Center** | `aws sso login --profile your-profile` | Enterprise teams |
+| **IAM Identity Center** | `aws login` (browser popup) | Quickest start |
+| **Named profile** | `kulshan --profile prod report` | Multi-account |
+| **Role assumption** | `kulshan --role-arn arn:aws:iam::...:role/KulshanAudit report` | Cross-account |
+| **Environment variables** | `export AWS_ACCESS_KEY_ID=...` | CI/CD pipelines |
+| **Console temp keys** | Copy from Console → "Command line access" | When SSO is unavailable |
 
-```bash
-aws login
-```
+### Detailed examples
 
-Browser opens → log in with your normal console credentials (MFA included) → click Allow → done.
-
-```bash
-kulshan report --quick
-```
-
-### Authenticate via SSO / Identity Center
+<details>
+<summary>SSO login (click to expand)</summary>
 
 ```bash
 aws sso login --profile your-profile
 kulshan --profile your-profile report --quick
 ```
+</details>
 
-### Temporary keys from the Console
-
-If `aws login` is blocked by your organization:
+<details>
+<summary>Temporary keys from the AWS Console</summary>
 
 1. Log into the AWS Console
 2. Click your name (top right) → "Command line or programmatic access"
 3. Copy the temporary credentials:
 
-**Windows (cmd):**
-```cmd
-set AWS_ACCESS_KEY_ID=ASIA...
-set AWS_SECRET_ACCESS_KEY=...
-set AWS_SESSION_TOKEN=...
+**Windows (PowerShell):**
+```powershell
+$env:AWS_ACCESS_KEY_ID="ASIA..."
+$env:AWS_SECRET_ACCESS_KEY="..."
+$env:AWS_SESSION_TOKEN="..."
 ```
 
-**Linux/macOS:**
+**macOS / Linux:**
 ```bash
 export AWS_ACCESS_KEY_ID=ASIA...
 export AWS_SECRET_ACCESS_KEY=...
@@ -156,17 +159,21 @@ export AWS_SESSION_TOKEN=...
 ```
 
 These expire when your session ends. **Never use long-term access keys.**
+</details>
 
-### Assume a dedicated role
+<details>
+<summary>Assume a dedicated role</summary>
 
 ```bash
 kulshan --role-arn arn:aws:iam::123456789012:role/KulshanAudit report --quick
 ```
+</details>
 
 ### Verify your access
 
 ```bash
-aws sts get-caller-identity
+aws sts get-caller-identity      # Confirms credentials work
+kulshan doctor                   # Shows which Kulshan packs your access enables
 ```
 
 ---
