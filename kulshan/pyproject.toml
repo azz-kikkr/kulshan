@@ -44,6 +44,7 @@ dependencies = [
     "numpy>=1.23.0",
     "plotext>=5.2.0",
     "networkx>=3.0",
+    "awscrt>=0.19",
 ]
 
 [project.optional-dependencies]

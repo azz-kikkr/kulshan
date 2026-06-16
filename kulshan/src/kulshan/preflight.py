@@ -43,7 +43,13 @@ def run_preflight(
         else:
             console.print("  [green]✓[/green] AWS credentials found")
     except Exception as e:
-        console.print(f"  [red]✗[/red] Credential error: {e}")
+        error_msg = str(e)
+        if "Missing Dependency" in error_msg or "awscrt" in error_msg.lower():
+            console.print("  [red]✗[/red] Missing AWS CRT dependency for login provider")
+            console.print("    [dim]Fix: pip install awscrt[/dim]")
+            console.print("    [dim]This is needed for 'aws login' browser-based credentials.[/dim]")
+        else:
+            console.print(f"  [red]✗[/red] Credential error: {error_msg[:80]}")
         all_passed = False
 
     # 3. STS identity (credentials not expired)
