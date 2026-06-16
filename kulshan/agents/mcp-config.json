@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "kulshan": {
+      "command": "kulshan",
+      "args": ["mcp-serve"],
+      "env": {},
+      "disabled": false,
+      "autoApprove": [
+        "kulshan_doctor",
+        "kulshan_report",
+        "kulshan_report_quick",
+        "kulshan_convert",
+        "kulshan_history"
+      ]
+    }
+  }
+}

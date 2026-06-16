@@ -246,35 +246,55 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
     regions = get_enabled_regions(session)
     if quick:
         regions = regions[:3]
+    elif len(regions) > 6:
+        # Cap at 6 regions by default for reasonable scan times
+        # Users with 17+ regions can use --quick (3) or explicit packs
+        console.print(f"  [dim]{len(regions)} regions enabled. Scanning top 6 by default. Use --quick for 3.[/dim]")
+        regions = regions[:6]
 
     # In quick mode, exclude slow packs unless user explicitly selected them
-    SLOW_PACKS = {"limit"}  # These take 300s+ due to per-service quota enumeration
-    if quick and packs is None:
-        console.print("  [dim]Quick mode: excluding slow packs (limit). Use --packs limit to include.[/dim]")
+    SLOW_PACKS = {"limit", "topo", "drift", "pulse"}  # These scan all regions sequentially — 5+ min on large accounts
+    if quick and not selected_packs:
+        selected_packs = [p for p in TOOL_ORDER if p not in SLOW_PACKS]
+        console.print("  [dim]Quick mode: running 6 fast packs. Use --packs to include all 10.[/dim]")
+    elif not quick and not selected_packs:
+        # Default (no --quick, no --packs): exclude only the very slowest pack
+        VERY_SLOW = {"limit"}  # limit enumerates every service quota — 300s+
+        selected_packs = [p for p in TOOL_ORDER if p not in VERY_SLOW]
+        console.print("  [dim]Excluding 'limit' pack (300s+). Use --packs limit to include it.[/dim]")
 
     # API cost notice (Cost Explorer charges $0.01/request, billed by AWS)
-    has_cost_pack = packs is None or "cost" in packs.split(",")
+    has_cost_pack = packs is None or "cost" in (packs or "").split(",")
     if not yes and has_cost_pack:
         est_cost = "$0.15-0.25" if quick else "$0.20-0.40"
         console.print(
             f"  [red bold]⚠ AWS Cost:[/red bold] "
-            f"The cost pack calls AWS Cost Explorer API (~{est_cost} one-time charge)."
+            f"The cost pack calls AWS Cost Explorer API (typically {est_cost})."
         )
         console.print(
-            f"  [dim]AWS charges $0.01 per CE API request. This is billed by AWS to your account, not by Kulshan.[/dim]"
+            f"  [dim]AWS bills CE API requests at $0.01 each. This is charged by AWS, not Kulshan.[/dim]"
         )
         console.print(
-            f"  [dim]All other 9 packs use free-tier APIs ($0). Use --packs security,sweep,dr to skip cost pack.[/dim]"
+            f"  [dim]All other 9 packs use free read-only APIs ($0).[/dim]"
         )
         console.print()
+        if not click.confirm("  Include the cost pack?", default=True):
+            console.print("  [dim]Cost pack excluded. Running remaining packs.[/dim]")
+            console.print()
+            if selected_packs:
+                selected_packs = [p for p in selected_packs if p != "cost"]
+            else:
+                from kulshan.orchestrator import TOOL_ORDER as _TO
+                selected_packs = [p for p in _TO if p != "cost"]
+            has_cost_pack = False
     elif not yes and not has_cost_pack:
         console.print("  [green]AWS API cost: $0.00[/green] [dim](cost pack excluded, all other APIs are free)[/dim]")
         console.print()
 
     # Parse pack selection for quick mode
     if not selected_packs and quick:
-        # Exclude slow packs in quick mode
-        selected_packs = [p for p in TOOL_ORDER if p not in SLOW_PACKS]
+        # Already handled above
+        pass
 
     start = time.time()
     results = run_all_scans(
