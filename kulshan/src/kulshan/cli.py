@@ -232,7 +232,7 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
             if invalid:
                 console.print(f"  [red]Unknown pack(s): {', '.join(invalid)}[/red]")
                 console.print(f"  [dim]Available: {', '.join(TOOL_ORDER)}[/dim]")
-                console.print(f"  [dim]Or: --packs all[/dim]")
+                console.print("  [dim]Or: --packs all[/dim]")
                 sys.exit(ExitCode.CONFIG_ERROR)
     else:
         # DEFAULT: cost pack only — fast, focused, predictable
@@ -290,7 +290,7 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
             f"The cost pack calls AWS Cost Explorer API (typically {est_cost})."
         )
         console.print(
-            f"  [dim]AWS bills CE API requests at $0.01 each. This is charged by AWS, not Kulshan.[/dim]"
+            "  [dim]AWS bills CE API requests at $0.01 each. This is charged by AWS, not Kulshan.[/dim]"
         )
         console.print()
         if not click.confirm("  Include the cost pack?", default=True):
@@ -390,7 +390,7 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
             f"\n  [dim]Report saved: [bold]{html_filename}[/bold] "
             "(common identifiers masked; review before sharing)[/dim]"
         )
-        console.print(f"  [dim]Use --show-pii for full account IDs. Open in browser for interactive view.[/dim]")
+        console.print("  [dim]Use --show-pii for full account IDs. Open in browser for interactive view.[/dim]")
 
     has_critical = any(
         r.get("scores", {}).get("severity_counts", {}).get("critical", 0) > 0

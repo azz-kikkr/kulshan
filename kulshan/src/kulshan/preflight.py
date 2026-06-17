@@ -58,7 +58,6 @@ def run_preflight(
         sts = session.client("sts")
         identity = sts.get_caller_identity()
         account = identity.get("Account", "unknown")
-        arn = identity.get("Arn", "")
         console.print(f"  [green]✓[/green] Authenticated (account {account})")
     except Exception as e:
         error_msg = str(e)
