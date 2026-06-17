@@ -151,7 +151,7 @@ def _emit_output(
 @click.option("--role-arn", default=None, help="IAM role ARN to assume.")
 @click.pass_context
 def main(ctx: click.Context, profile: Optional[str], role_arn: Optional[str]) -> None:
-    """Kulshan: local-first AWS FinOps audit."""
+    """Kulshan: local-first AWS FinOps baseline."""
     ctx.ensure_object(dict)
     ctx.obj["profile"] = profile
     ctx.obj["role_arn"] = role_arn
@@ -163,21 +163,21 @@ def main(ctx: click.Context, profile: Optional[str], role_arn: Optional[str]) ->
         c = RichConsole()
         c.print()
         c.print(Panel.fit(
-            "[bold]Kulshan[/bold] — local-first AWS FinOps audit\n"
-            "[dim]Read-only. Privacy-first. No uploads. No SaaS.[/dim]\n\n"
+            "[bold]Kulshan[/bold] — local-first AWS FinOps baseline\n"
+            "[dim]Read-only. Local reports. No SaaS. No telemetry.[/dim]\n\n"
             "[bold]Get started:[/bold]\n"
-            "  [green]kulshan doctor[/green]              Check what works with your current AWS creds\n"
-            "  [green]kulshan report[/green]             Cost Explorer baseline (~30s)\n"
-            "  [green]kulshan report --packs all --regions us-east-1[/green]  Full audit\n\n"
-            "[bold]Output:[/bold]\n"
-            "  [green]kulshan report -o report.html[/green]   Save HTML report\n"
-            "  [green]kulshan report --format json[/green]    Machine-readable JSON\n\n"
+            "  [green]kulshan doctor[/green]              Check AWS connectivity\n"
+            "  [green]kulshan report[/green]              90-day cost baseline (default)\n"
+            "  [green]kulshan report -o report.html[/green]   Save as HTML\n\n"
+            "[bold]Add more packs:[/bold]\n"
+            "  [green]kulshan report --packs cost,tag[/green]       Add tag allocation\n"
+            "  [green]kulshan report --packs cost,sweep[/green]     Add waste detection\n"
+            "  [green]kulshan report --packs all --regions us-east-1[/green]\n\n"
             "[bold]Other:[/bold]\n"
-            "  [green]kulshan history[/green]             Past scan results\n"
+            "  [green]kulshan history[/green]             Past scans\n"
             "  [green]kulshan shell[/green]               Interactive REPL\n\n"
-            "[dim]Already have AWS creds configured? Just run it — Kulshan is read-only\n"
-            "and the preflight will tell you exactly what's available.[/dim]\n\n"
-            "[dim]Tip: append [bold]?[/bold] to any command for options. Example: [green]kulshan report ?[/green][/dim]",
+            "[dim]Uses the AWS credentials you already have configured.\n"
+            "Default: reads Cost Explorer, writes a local report.[/dim]",
             title="[bold blue]kulshan[/bold blue]",
             border_style="blue",
         ))
@@ -628,4 +628,4 @@ def doctor(ctx: click.Context) -> None:
 # -- Wire up tab completion, ? help, theming, and Rich help formatting --
 from kulshan.setup import setup_cli  # noqa: E402
 
-setup_cli(main, "Kulshan", "Operations Intelligence from your terminal.", __version__)
+setup_cli(main, "Kulshan", "Local-first AWS FinOps baseline.", __version__)

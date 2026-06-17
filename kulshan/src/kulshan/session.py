@@ -4,8 +4,16 @@ from __future__ import annotations
 from typing import List, Optional
 
 import boto3
+from botocore.config import Config
 
 from kulshan.errors import SessionError
+
+# Sane defaults: don't let a single slow endpoint stall the scan.
+BOTO_CONFIG = Config(
+    connect_timeout=5,
+    read_timeout=15,
+    retries={"max_attempts": 2, "mode": "standard"},
+)
 
 
 def create_session(
@@ -43,7 +51,7 @@ def get_account_id(session: boto3.Session) -> str:
 
 def get_enabled_regions(session: boto3.Session) -> List[str]:
     try:
-        ec2 = session.client("ec2", region_name="us-east-1")
+        ec2 = session.client("ec2", region_name="us-east-1", config=BOTO_CONFIG)
         resp = ec2.describe_regions(
             Filters=[{"Name": "opt-in-status", "Values": ["opt-in-not-required", "opted-in"]}]
         )

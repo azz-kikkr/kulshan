@@ -385,7 +385,7 @@ body {
 </style>
 </head>
 <body>
-<div class="synthetic-banner" role="note"><div class="synthetic-banner-title"><strong>Synthetic sample report</strong></div><div class="synthetic-banner-body">This report uses fixture data only. No customer data, no real AWS account IDs, and no live AWS environment were used.</div></div>
+
 <div class="container">
 
   <!-- Header -->
@@ -394,9 +394,9 @@ body {
       <h1><span>Kulshan</span> Report</h1>
     </div>
     <div class="header-meta">
-      Account: 000000000000<br>
-      Regions: 3 | Duration: 12.4s<br>
-      2026-04-30 12:00:00 UTC
+      Account: XXXX-XXXX-9834<br>
+      Regions: 1 | Duration: 2.4s<br>
+      2026-06-17 01:21:03 UTC
       <button class="theme-toggle" id="theme-toggle">Dark Mode</button>
     </div>
   </header>
@@ -404,83 +404,39 @@ body {
   <!-- Executive Summary -->
   <div class="exec-summary">
 <h2 class="section-title">Executive Summary</h2>
-<p class="exec-text">This account spent <strong>$12,346</strong> over the analysis period.  Spend is <strong>increasing</strong> at 2.0% per day.  60% of spend is on-demand — commitment strategy recommended.  <strong>$38,781/month</strong> in addressable savings identified.  Top priority: EC2 - Other spike, 78% in account 000000000000, 95% in us-east-1, 88% USE1-NatGa.  Cost Health Score: <strong>77/100 (C+)</strong>.</p>
+<p class="exec-text">This account has near-zero AWS spend, so cost analysis is limited. Run Kulshan against an account with meaningful spend for richer recommendations.  Cost Health Score: <strong>43/100 (F)</strong>.</p>
 </div>
 
   <!-- What To Do Next -->
-  <h2 class="section-title">What To Do Next</h2>
-<table class="actions-table">
-<thead><tr><th>#</th><th>Severity</th><th>Action</th><th>Impact</th><th>Effort</th></tr></thead>
-<tbody>
-<tr><td class="action-rank">1</td><td><span class="sev-pill" style="background:#c62828">Critical</span></td><td><div class="action-title">EC2 - Other spike, 78% in account 000000000000, 95% in us-east-1, 88% USE1-NatGateway-Bytes</div><div class="action-rec">Investigate in account 000000000000, region us-east-1, usage type USE1-NatGateway-Bytes.</div></td><td class="action-impact">$18,712/mo</td><td class="action-effort">Medium</td></tr>
-<tr><td class="action-rank">2</td><td><span class="sev-pill" style="background:#e65100">High</span></td><td><div class="action-title">AWS-detected anomaly: EC2 - Other, in us-east-1, account 000000000000, $1,248 impact</div><div class="action-rec">Verify in the AWS Cost Anomaly Detection console; AnomalyId: AnomalyOverlap-0001; mark feedback if expected.</div></td><td class="action-impact">$18,712/mo</td><td class="action-effort">Medium</td></tr>
-<tr><td class="action-rank">3</td><td><span class="sev-pill" style="background:#f57f17">Medium</span></td><td><div class="action-title">Amazon RDS spike, 92% in eu-west-1</div><div class="action-rec">Investigate Amazon RDS cost change; no single account drives it. Compare per-account spend over the anomaly window.</div></td><td class="action-impact">$1,356/mo</td><td class="action-effort">Medium</td></tr>
-</tbody>
-</table>
+  
 
   <!-- Addressable Savings -->
-  <div class="money-on-fire">
-<div class="mof-hero"><span class="mof-icon">🔥</span><span class="mof-total">$38,906<span class="mof-per">/month</span></span></div>
-<div class="mof-subtitle">Total addressable savings identified</div>
-<div class="mof-breakdown"><div class="mof-row"><span class="mof-label">Cost anomalies &amp; rightsizing</span><span class="mof-amount">$38,781/mo</span></div>
-<div class="mof-row"><span class="mof-label">Orphaned resources</span><span class="mof-amount">$124/mo</span></div></div>
-</div>
+  
 
   <!-- Commitment Health -->
-  <h2 class="section-title">Commitment Health</h2>
-<div class="commitment-health">
-<div class="commitment-summary"><span class="cs-item">Committed: <strong>35%</strong></span><span class="cs-item">On-Demand: <strong>60%</strong></span><span class="cs-item">Spot: <strong>5%</strong></span></div>
-</div>
+  
 
   <!-- Spend Concentration -->
-  <h2 class="section-title">Spend Concentration</h2>
-<div class="spend-concentration">
-<div class="conc-row"><span class="conc-name">Amazon EC2</span><div class="conc-bar-track"><div class="conc-bar-fill" style="width:42.0%"></div></div><span class="conc-pct">42%</span></div>
-<div class="conc-row"><span class="conc-name">Amazon RDS</span><div class="conc-bar-track"><div class="conc-bar-fill" style="width:22.0%"></div></div><span class="conc-pct">22%</span></div>
-<div class="conc-row"><span class="conc-name">Amazon S3</span><div class="conc-bar-track"><div class="conc-bar-fill" style="width:14.0%"></div></div><span class="conc-pct">14%</span></div>
-<div class="conc-row"><span class="conc-name">AWS Lambda</span><div class="conc-bar-track"><div class="conc-bar-fill" style="width:8.0%"></div></div><span class="conc-pct">8%</span></div>
-<div class="conc-row"><span class="conc-name">Amazon CloudWatch</span><div class="conc-bar-track"><div class="conc-bar-fill" style="width:6.0%"></div></div><span class="conc-pct">6%</span></div>
-<p class="conc-note">Amazon EC2 is the largest cost driver at 42%. Spend is moderately diversified.</p>
-</div>
+  
 
   <!-- Spend Trend -->
   <h2 class="section-title">Spend Trend</h2>
 <div class="spend-trend">
-<div class="trend-metrics"><span class="trend-item">Daily average: <strong>$412</strong></span><span class="trend-item">Trend: <strong>Increasing (+2.0%/day)</strong></span></div>
-<div class="trend-sparkline"><svg width="320" height="60" viewBox="0 0 320 60" class="sparkline" aria-label="Cost trend sparkline"><polygon points="2.0,56.0 2.0,56.0 12.9,51.6 23.8,49.4 34.7,45.9 45.6,44.3 56.5,40.7 67.4,39.2 78.3,37.1 89.2,35.7 100.1,33.3 111.0,31.4 121.9,29.8 132.8,28.4 143.7,27.1 154.6,25.4 165.4,24.2 176.3,22.6 187.2,21.3 198.1,19.7 209.0,18.4 219.9,17.0 230.8,15.4 241.7,14.1 252.6,12.6 263.5,11.0 274.4,9.7 285.3,8.2 296.2,6.9 307.1,5.4 318.0,4.0 318.0,56.0" fill="#ef535020" stroke="none" /><polyline points="2.0,56.0 12.9,51.6 23.8,49.4 34.7,45.9 45.6,44.3 56.5,40.7 67.4,39.2 78.3,37.1 89.2,35.7 100.1,33.3 111.0,31.4 121.9,29.8 132.8,28.4 143.7,27.1 154.6,25.4 165.4,24.2 176.3,22.6 187.2,21.3 198.1,19.7 209.0,18.4 219.9,17.0 230.8,15.4 241.7,14.1 252.6,12.6 263.5,11.0 274.4,9.7 285.3,8.2 296.2,6.9 307.1,5.4 318.0,4.0" fill="none" stroke="#ef5350" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" /><circle cx="318.0" cy="4.0" r="2.5" fill="#ef5350" /><text x="318" y="56" text-anchor="end" font-size="8" fill="var(--text-secondary,#999)" dominant-baseline="auto">$320</text><text x="318" y="12" text-anchor="end" font-size="8" fill="var(--text-secondary,#999)" dominant-baseline="hanging">$500</text></svg></div>
+<div class="trend-metrics"><span class="trend-item">Daily average: <strong>$0</strong></span><span class="trend-item">Trend: <strong>Stable</strong></span></div>
+<div class="trend-sparkline"><svg width="320" height="60" viewBox="0 0 320 60" class="sparkline" aria-label="Cost trend sparkline"><polygon points="2.0,56.0 2.0,56.0 47.1,56.0 92.3,56.0 137.4,56.0 182.6,56.0 227.7,56.0 272.9,56.0 318.0,56.0 318.0,56.0" fill="#1565c020" stroke="none" /><polyline points="2.0,56.0 47.1,56.0 92.3,56.0 137.4,56.0 182.6,56.0 227.7,56.0 272.9,56.0 318.0,56.0" fill="none" stroke="#1565c0" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" /><circle cx="318.0" cy="56.0" r="2.5" fill="#1565c0" /><text x="318" y="56" text-anchor="end" font-size="8" fill="var(--text-secondary,#999)" dominant-baseline="auto">$0</text><text x="318" y="12" text-anchor="end" font-size="8" fill="var(--text-secondary,#999)" dominant-baseline="hanging">$0</text></svg></div>
 </div>
 
   <!-- Detailed Breakdown -->
   <h2 class="section-title">Detailed Breakdown</h2>
-  <details class="tool-detail"><summary><span class="detail-icon">💰</span><span class="detail-name">Cost Analyzer</span><span class="detail-grade" style="color:#f57f17">C-</span><span class="detail-status">72/100</span></summary><div class="detail-body"><div class="detail-bar"><svg width="300" height="14" aria-label="Score bar 72 percent"><rect x="0" y="0" width="300" height="14" rx="7" fill="var(--track-color)" /><rect x="0" y="0" width="216" height="14" rx="7" fill="#f57f17" /></svg></div><table class="breakdown-table"><thead><tr><th>Category</th><th>Score</th><th></th></tr></thead><tbody><tr><td class="detail-label">total_spend</td><td class="detail-score">12345.67</td><td><svg width="200" height="10" aria-label="Score bar 100 percent"><rect x="0" y="0" width="200" height="10" rx="5" fill="var(--track-color)" /><rect x="0" y="0" width="200" height="10" rx="5" fill="#2e7d32" /></svg></td></tr></tbody></table><div class="cost-findings">
-<div class="overlap-summary"><div class="overlap-status">AWS Cost Anomaly Detection: <strong>ok</strong> · 1 anomaly · 90-day lookback</div><div class="overlap-counts"><span class="ovc-both">1 confirmed by Kulshan</span><span class="ovc-reck">1 Kulshan-only</span><span class="ovc-aws">0 AWS-only</span></div></div>
-<h3 class="findings-subsection">Kulshan statistical anomalies</h3>
-<div class="finding-cards">
-<div class="finding-card"><div class="finding-head"><span class="sev-pill" style="background:#c62828">Critical</span><span class="finding-impact">$18,712.50/mo</span><span class="finding-conf">95% confidence</span></div><div class="finding-title">EC2 - Other spike, 78% in account 000000000000, 95% in us-east-1, 88% USE1-NatGateway-Bytes</div><dl class="finding-meta"><dt>Account</dt><dd>000000000000</dd><dt>Region</dt><dd>us-east-1</dd><dt>Service</dt><dd>EC2 - Other</dd><dt>Usage type</dt><dd>USE1-NatGateway-Bytes</dd></dl><p class="finding-why">Cost is 98% above baseline (z-score 4.1, methods: Z:4.1σ, IQR, MAD:5.2).</p><p class="finding-rec"><strong>Recommended:</strong> Investigate in account 000000000000, region us-east-1, usage type USE1-NatGateway-Bytes.</p><details class="finding-evidence"><summary>Evidence</summary><table class="evidence-table"><tr><th>date</th><td>2026-04-15</td></tr><tr><th>z_score</th><td>4.1</td></tr><tr><th>methods</th><td>Z:4.1σ, IQR, MAD:5.2</td></tr><tr><th>num_methods</th><td>3</td></tr><tr><th>overlap_with</th><td>cost-anomaly_aws_native-bbbbbbbbbbbbbbbb</td></tr></table></details></div>
-<div class="finding-card"><div class="finding-head"><span class="sev-pill" style="background:#f57f17">Medium</span><span class="finding-impact">$1,356.00/mo</span><span class="finding-conf">80% confidence</span></div><div class="finding-title">Amazon RDS spike, 92% in eu-west-1</div><dl class="finding-meta"><dt>Region</dt><dd>eu-west-1</dd><dt>Service</dt><dd>Amazon Relational Database Service</dd></dl><p class="finding-why">Cost is 100% above baseline (z-score 2.6, methods: Z:2.6σ, IQR).</p><p class="finding-rec"><strong>Recommended:</strong> Investigate Amazon RDS cost change; no single account drives it. Compare per-account spend over the anomaly window.</p><details class="finding-evidence"><summary>Evidence</summary><table class="evidence-table"><tr><th>date</th><td>2026-04-22</td></tr><tr><th>z_score</th><td>2.6</td></tr><tr><th>methods</th><td>Z:2.6σ, IQR</td></tr><tr><th>num_methods</th><td>2</td></tr></table></details></div>
-</div>
-
-<h3 class="findings-subsection">AWS-native Cost Anomaly Detection</h3>
-<div class="finding-cards">
-<div class="finding-card"><div class="finding-head"><span class="sev-pill" style="background:#e65100">High</span><span class="finding-impact">$18,712.50/mo</span><span class="finding-conf">95% confidence</span></div><div class="finding-title">AWS-detected anomaly: EC2 - Other, in us-east-1, account 000000000000, $1,248 impact</div><dl class="finding-meta"><dt>Account</dt><dd>000000000000</dd><dt>Region</dt><dd>us-east-1</dd><dt>Service</dt><dd>EC2 - Other</dd><dt>Usage type</dt><dd>USE1-NatGateway-Bytes</dd></dl><p class="finding-why">AWS Cost Anomaly Detection ML model flagged $2,496 actual vs $1,249 expected over 2026-04-13 to 2026-04-15.</p><p class="finding-rec"><strong>Recommended:</strong> Verify in the AWS Cost Anomaly Detection console; AnomalyId: AnomalyOverlap-0001; mark feedback if expected.</p><details class="finding-evidence"><summary>Evidence</summary><table class="evidence-table"><tr><th>source</th><td>aws_cost_anomaly_detection</td></tr><tr><th>aws_anomaly_id</th><td>AnomalyOverlap-0001</td></tr><tr><th>start_date</th><td>2026-04-13</td></tr><tr><th>end_date</th><td>2026-04-15</td></tr><tr><th>anomaly_days</th><td>2</td></tr><tr><th>total_impact</th><td>1247.5</td></tr><tr><th>max_impact</th><td>891.0</td></tr><tr><th>total_actual</th><td>2496.0</td></tr><tr><th>total_expected</th><td>1248.5</td></tr><tr><th>overlap_with</th><td>cost-anomaly_statistical-aaaaaaaaaaaaaaaa</td></tr></table></details></div>
-</div>
-
+  <details class="tool-detail"><summary><span class="detail-icon">💰</span><span class="detail-name">Cost Analyzer</span><span class="detail-grade" style="color:#c62828">F</span><span class="detail-status">43/100</span></summary><div class="detail-body"><div class="detail-bar"><svg width="300" height="14" aria-label="Score bar 43 percent"><rect x="0" y="0" width="300" height="14" rx="7" fill="var(--track-color)" /><rect x="0" y="0" width="129" height="14" rx="7" fill="#c62828" /></svg></div><table class="breakdown-table"><thead><tr><th>Category</th><th>Score</th><th></th></tr></thead><tbody><tr><td class="detail-label">total_spend</td><td class="detail-score">-4.1359030627651384e-25</td><td><svg width="200" height="10" aria-label="Score bar 0 percent"><rect x="0" y="0" width="200" height="10" rx="5" fill="var(--track-color)" /><rect x="0" y="0" width="0" height="10" rx="5" fill="#c62828" /></svg></td></tr></tbody></table><div class="cost-findings">
+<div class="overlap-summary"><div class="overlap-status">AWS Cost Anomaly Detection: <strong>no_data</strong> · 0 anomalies · 30-day lookback</div><div class="overlap-counts"><span class="ovc-both">0 confirmed by Kulshan</span><span class="ovc-reck">0 Kulshan-only</span><span class="ovc-aws">0 AWS-only</span></div><div class="overlap-details">no anomalies returned (no monitor configured, no anomalies in window, or insufficient permissions)</div></div>
 </div></div></details>
-<details class="tool-detail"><summary><span class="detail-icon">🛡️</span><span class="detail-name">Security Scanner</span><span class="detail-grade" style="color:#e65100">D</span><span class="detail-status">65/100</span></summary><div class="detail-body"><div class="detail-bar"><svg width="300" height="14" aria-label="Score bar 65 percent"><rect x="0" y="0" width="300" height="14" rx="7" fill="var(--track-color)" /><rect x="0" y="0" width="195" height="14" rx="7" fill="#e65100" /></svg></div></div></details>
-<details class="tool-detail"><summary><span class="detail-icon">🧹</span><span class="detail-name">Waste Detector</span><span class="detail-grade" style="color:#1565c0">B+</span><span class="detail-status">88/100</span></summary><div class="detail-body"><div class="detail-bar"><svg width="300" height="14" aria-label="Score bar 88 percent"><rect x="0" y="0" width="300" height="14" rx="7" fill="var(--track-color)" /><rect x="0" y="0" width="264" height="14" rx="7" fill="#1565c0" /></svg></div><table class="breakdown-table"><thead><tr><th>Category</th><th>Score</th><th></th></tr></thead><tbody><tr><td class="detail-label">monthly_waste</td><td class="detail-score">124.5</td><td><svg width="200" height="10" aria-label="Score bar 100 percent"><rect x="0" y="0" width="200" height="10" rx="5" fill="var(--track-color)" /><rect x="0" y="0" width="200" height="10" rx="5" fill="#2e7d32" /></svg></td></tr></tbody></table></div></details>
-<details class="tool-detail"><summary><span class="detail-icon">🚑</span><span class="detail-name">DR Readiness</span><span class="detail-grade" style="color:#1565c0">B-</span><span class="detail-status">81/100</span></summary><div class="detail-body"><div class="detail-bar"><svg width="300" height="14" aria-label="Score bar 81 percent"><rect x="0" y="0" width="300" height="14" rx="7" fill="var(--track-color)" /><rect x="0" y="0" width="243" height="14" rx="7" fill="#1565c0" /></svg></div></div></details>
-<details class="tool-detail"><summary><span class="detail-icon">⏳</span><span class="detail-name">Lifecycle Audit</span><span class="detail-grade" style="color:#f57f17">C+</span><span class="detail-status">77/100</span></summary><div class="detail-body"><div class="detail-bar"><svg width="300" height="14" aria-label="Score bar 77 percent"><rect x="0" y="0" width="300" height="14" rx="7" fill="var(--track-color)" /><rect x="0" y="0" width="231" height="14" rx="7" fill="#f57f17" /></svg></div></div></details>
-<details class="tool-detail"><summary><span class="detail-icon">🧭</span><span class="detail-name">IaC Drift</span><span class="detail-grade" style="color:#2e7d32">A-</span><span class="detail-status">90/100</span></summary><div class="detail-body"><div class="detail-bar"><svg width="300" height="14" aria-label="Score bar 90 percent"><rect x="0" y="0" width="300" height="14" rx="7" fill="var(--track-color)" /><rect x="0" y="0" width="270" height="14" rx="7" fill="#2e7d32" /></svg></div></div></details>
-<details class="tool-detail"><summary><span class="detail-icon">🏷️</span><span class="detail-name">Tag Governance</span><span class="detail-grade" style="color:#c62828">F</span><span class="detail-status">55/100</span></summary><div class="detail-body"><div class="detail-bar"><svg width="300" height="14" aria-label="Score bar 55 percent"><rect x="0" y="0" width="300" height="14" rx="7" fill="var(--track-color)" /><rect x="0" y="0" width="165" height="14" rx="7" fill="#c62828" /></svg></div></div></details>
-<details class="tool-detail"><summary><span class="detail-icon">💓</span><span class="detail-name">Observability</span><span class="detail-grade" style="color:#1565c0">B</span><span class="detail-status">83/100</span></summary><div class="detail-body"><div class="detail-bar"><svg width="300" height="14" aria-label="Score bar 83 percent"><rect x="0" y="0" width="300" height="14" rx="7" fill="var(--track-color)" /><rect x="0" y="0" width="249" height="14" rx="7" fill="#1565c0" /></svg></div></div></details>
-<details class="tool-detail"><summary><span class="detail-icon">📊</span><span class="detail-name">Quota Headroom</span><span class="detail-grade" style="color:#2e7d32">A</span><span class="detail-status">92/100</span></summary><div class="detail-body"><div class="detail-bar"><svg width="300" height="14" aria-label="Score bar 92 percent"><rect x="0" y="0" width="300" height="14" rx="7" fill="var(--track-color)" /><rect x="0" y="0" width="276" height="14" rx="7" fill="#2e7d32" /></svg></div></div></details>
-<details class="tool-detail"><summary><span class="detail-icon">🌐</span><span class="detail-name">Network Topology</span><span class="detail-grade" style="color:#1565c0">B+</span><span class="detail-status">86/100</span></summary><div class="detail-body"><div class="detail-bar"><svg width="300" height="14" aria-label="Score bar 86 percent"><rect x="0" y="0" width="300" height="14" rx="7" fill="var(--track-color)" /><rect x="0" y="0" width="258" height="14" rx="7" fill="#1565c0" /></svg></div></div></details>
 
   <!-- Footer -->
   <footer class="footer">
     Generated by Kulshan v0.1.0<br>
-    2026-04-30 12:00:00 UTC<br>
-    Overall Score: 77/100 (C+)<br>
+    2026-06-17 01:21:03 UTC<br>
+    Cost Health Score: 43/100 (F)<br>
     This report was generated locally. No data was sent to external services.
   </footer>
 

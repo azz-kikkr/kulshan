@@ -29,22 +29,22 @@ pip install kulshan
 # 1. Verify
 kulshan doctor
 
-# 2. Scan
-kulshan report --format json -o kulshan-scan.json --yes    # For agents
-kulshan report --format html -o kulshan-report.html --yes  # For humans
+# 2. Default: 90-day FinOps baseline (cost pack only, ~30s)
+kulshan report --format json -o kulshan-scan.json --yes
 
-# 3. Quick scan (faster, 3 regions)
-kulshan report --quick --format json -o kulshan-scan.json --yes
+# 3. Add tag allocation
+kulshan report --packs cost,tag --format json -o kulshan-scan.json --yes
 
-# 4. Free scan (no CE charges)
-kulshan report --packs security,sweep,dr --format json -o kulshan-scan.json --yes
+# 4. Add waste detection (needs regions)
+kulshan report --packs cost,tag,sweep --regions us-east-1 --format json -o kulshan-scan.json --yes
 
-# 5. Re-render without re-scanning
+# 5. Full diagnostic (all packs, explicit)
+kulshan report --packs all --regions us-east-1 --format json -o kulshan-scan.json --yes
+
+# 6. Re-render without re-scanning
 kulshan convert -i kulshan-scan.json --format html -o report.html
-kulshan convert -i kulshan-scan.json --format sarif -o findings.sarif
-kulshan convert -i kulshan-scan.json --format csv -o findings.csv
 
-# 6. History
+# 7. History
 kulshan history
 ```
 
