@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from kulshan.__version__ import __version__
+from kulshan.checks.cost.analyzers.advanced import generate_svg_sparkline
 from kulshan.orchestrator import TOOL_LABELS, TOOL_ORDER
 from kulshan.theme_constants import TOOL_ICONS, GRADE_COLORS_HEX, SEVERITY_COLORS_HEX
 
@@ -124,28 +125,35 @@ def generate_html_report(
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     esc = html.escape
 
-    # Build tool scorecards
-    tool_cards_html = _build_tool_cards(results)
+    # Determine which packs actually ran (not skipped)
+    ran_packs = [k for k in TOOL_ORDER if k in results and not results[k].get("skipped")]
 
-    # Build severity summary
-    severity_html = _build_severity_summary(results)
+    # Executive Summary (prose paragraph)
+    executive_summary_html = _build_executive_summary(results, overall_score, overall_grade, top_actions or [])
 
-    # Phase 6C-2: ranked Top Actions table (empty string when no findings).
-    top_actions_html = _build_top_actions_section(top_actions or [])
+    # What To Do Next (top actions, renamed)
+    what_to_do_html = _build_what_to_do_next(top_actions or [], ran_packs)
 
-    # Commitment KPI + Money on Fire sections (from cost pack data)
-    commitment_kpi_html = _build_commitment_kpi(results)
-    money_on_fire_html = _build_money_on_fire(results, top_actions or [])
+    # Addressable Savings (Money on Fire, renamed)
+    addressable_savings_html = _build_addressable_savings(results, top_actions or [])
 
-    # Build per-tool detail sections (cost pack gets findings + overlap inline)
-    details_html = _build_tool_details(results)
+    # Commitment Health (merged: old KPI + purchase mix)
+    commitment_health_html = _build_commitment_health(results)
+
+    # Spend Concentration (renamed from HHI)
+    spend_concentration_html = _build_spend_concentration(results)
+
+    # Spend Trend (renamed from Cost Velocity)
+    spend_trend_html = _build_spend_trend(results)
+
+    # Detailed Breakdown (only packs that ran)
+    details_html = _build_detailed_breakdown(results, ran_packs)
 
     # Synthetic-sample banner: opt-in, default off.
     synthetic_banner_html = _SYNTHETIC_BANNER_HTML if synthetic_sample else ""
 
-    # Overall dial
-    hero_dial = _svg_dial(overall_score, size=180)
-    hero_color = _grade_color(overall_grade)
+    # Cost Health Score (small, contextual — not a hero dial)
+    score_label = "Cost Health Score" if ran_packs == ["cost"] else "Overall Score"
 
     return _HTML_TEMPLATE.format(
         css=_CSS,
@@ -155,16 +163,17 @@ def generate_html_report(
         regions_count=len(regions),
         duration=f"{duration_secs:.1f}",
         timestamp=esc(timestamp),
-        hero_dial=hero_dial,
         overall_grade=esc(overall_grade),
-        hero_color=hero_color,
         overall_score=overall_score,
-        tool_cards=tool_cards_html,
-        severity_summary=severity_html,
-        top_actions_section=top_actions_html,
-        commitment_kpi_section=commitment_kpi_html,
-        money_on_fire_section=money_on_fire_html,
-        tool_details=details_html,
+        score_label=esc(score_label),
+        hero_color=_grade_color(overall_grade),
+        executive_summary=executive_summary_html,
+        what_to_do_next=what_to_do_html,
+        addressable_savings=addressable_savings_html,
+        commitment_health=commitment_health_html,
+        spend_concentration=spend_concentration_html,
+        spend_trend=spend_trend_html,
+        detailed_breakdown=details_html,
         synthetic_banner=synthetic_banner_html,
     )
 
@@ -698,6 +707,361 @@ def _build_overlap_summary(cad: dict) -> str:
     )
 
 
+# ── New Report IA: Executive Summary, What To Do Next, etc. ───────────────────
+
+
+def _build_executive_summary(results: dict, overall_score: int, overall_grade: str, top_actions: list) -> str:
+    """Build a 3-5 sentence executive summary paragraph."""
+    cost = results.get("cost") or {}
+    scores = cost.get("scores", {})
+    total_spend = scores.get("total_spend", 0)
+    metadata = cost.get("metadata", {})
+    velocity = metadata.get("cost_velocity", {})
+    hhi = metadata.get("hhi_concentration", {})
+    purchase_mix = metadata.get("purchase_mix", {})
+
+    sentences: list[str] = []
+
+    # Spend
+    if total_spend and abs(total_spend) > 1:
+        sentences.append(f"This account spent <strong>${total_spend:,.0f}</strong> over the analysis period.")
+    else:
+        sentences.append("This account has near-zero AWS spend. Analysis is limited to configuration checks.")
+
+    # Trend
+    trend = velocity.get("trend", "")
+    vel_pct = velocity.get("velocity_pct", 0)
+    if trend and abs(vel_pct) > 0.5 and total_spend > 1:
+        if vel_pct > 0:
+            sentences.append(f"Spend is <strong>increasing</strong> at {vel_pct:.1f}% per day.")
+        else:
+            sentences.append(f"Spend is <strong>decreasing</strong> at {abs(vel_pct):.1f}% per day.")
+
+    # Commitment
+    committed_pct = purchase_mix.get("committed_pct", 0)
+    on_demand_pct = purchase_mix.get("on_demand_pct", 0)
+    if on_demand_pct > 50 and total_spend > 1:
+        sentences.append(f"{on_demand_pct:.0f}% of spend is on-demand — commitment strategy recommended.")
+    elif committed_pct > 60:
+        sentences.append(f"{committed_pct:.0f}% of spend is committed — good coverage.")
+
+    # Savings
+    total_savings = sum(float(a.get("estimated_monthly_impact", 0) or 0) for a in top_actions if float(a.get("estimated_monthly_impact", 0) or 0) > 0)
+    if total_savings > 1:
+        sentences.append(f"<strong>${total_savings:,.0f}/month</strong> in addressable savings identified.")
+
+    # Top action
+    if top_actions:
+        top = top_actions[0]
+        title = str(top.get("title", ""))[:80]
+        sentences.append(f"Top priority: {html.escape(title)}.")
+
+    # Grade
+    if overall_grade not in ("N/A", "--"):
+        sentences.append(f"Cost Health Score: <strong>{overall_score}/100 ({overall_grade})</strong>.")
+
+    if not sentences:
+        return ""
+
+    return (
+        '<div class="exec-summary">\n'
+        '<h2 class="section-title">Executive Summary</h2>\n'
+        f'<p class="exec-text">{"  ".join(sentences)}</p>\n'
+        '</div>'
+    )
+
+
+def _build_what_to_do_next(top_actions: list, ran_packs: list) -> str:
+    """Build the 'What To Do Next' section — prioritized actions table."""
+    if not top_actions:
+        return ""
+
+    rows: list[str] = []
+    for i, f in enumerate(top_actions[:10], start=1):
+        sev = str(f.get("severity") or "info")
+        sev_color = _SEV_COLORS.get(sev, "#9e9e9e")
+        title = html.escape(_truncate(str(f.get("title") or ""), 120))
+        rec = f.get("recommended_action") or ""
+        rec_html = f'<div class="action-rec">{html.escape(_truncate(str(rec), 180))}</div>' if rec else ""
+
+        # Impact: show $ if available, otherwise show "Risk" or "Visibility"
+        impact_val = float(f.get("estimated_monthly_impact", 0) or 0)
+        if impact_val >= 1:
+            impact = f"${impact_val:,.0f}/mo"
+        else:
+            # Non-monetary impact
+            pack = f.get("pack", "")
+            if pack == "security":
+                impact = "Risk reduction"
+            elif pack in ("pulse", "drift"):
+                impact = "Visibility"
+            else:
+                impact = "—"
+
+        effort = str(f.get("effort", "medium")).capitalize()
+
+        rows.append(
+            f'<tr>'
+            f'<td class="action-rank">{i}</td>'
+            f'<td><span class="sev-pill" style="background:{sev_color}">{html.escape(sev.capitalize())}</span></td>'
+            f'<td><div class="action-title">{title}</div>{rec_html}</td>'
+            f'<td class="action-impact">{impact}</td>'
+            f'<td class="action-effort">{effort}</td>'
+            f'</tr>'
+        )
+
+    return (
+        '<h2 class="section-title">What To Do Next</h2>\n'
+        '<table class="actions-table">\n'
+        '<thead><tr><th>#</th><th>Severity</th><th>Action</th><th>Impact</th><th>Effort</th></tr></thead>\n'
+        '<tbody>\n' + "\n".join(rows) + '\n</tbody>\n</table>'
+    )
+
+
+def _build_addressable_savings(results: dict, top_actions: list) -> str:
+    """Build the Addressable Savings section (renamed Money on Fire)."""
+    return _build_money_on_fire(results, top_actions)
+
+
+def _build_commitment_health(results: dict) -> str:
+    """Build merged Commitment Health section (old KPI + purchase mix)."""
+    cost_result = results.get("cost") or {}
+    if cost_result.get("skipped"):
+        return ""
+
+    metadata = cost_result.get("metadata") or {}
+    scores = cost_result.get("scores", {})
+    breakdown = scores.get("breakdown", {})
+    purchase_mix = metadata.get("purchase_mix") or {}
+
+    # Get commitment data from breakdown
+    ri_sp_cov = breakdown.get("ri_sp_coverage", {})
+    ri_sp_util = breakdown.get("ri_sp_utilization", {})
+
+    # Get purchase mix percentages
+    on_demand_pct = purchase_mix.get("on_demand_pct", 0)
+    committed_pct = purchase_mix.get("committed_pct", 0)
+    spot_pct = purchase_mix.get("spot_pct", 0)
+
+    # If no meaningful data, skip
+    has_kpi = ri_sp_cov and ri_sp_cov.get("score", 0) > 0
+    has_mix = committed_pct > 0 or on_demand_pct > 0
+
+    if not has_kpi and not has_mix:
+        return ""
+
+    parts: list[str] = []
+
+    # KPI bars
+    def _bar(label: str, value: float, target: float, max_score: float, actual_score: float) -> str:
+        pct = min(100, max(0, value))
+        color = "#2e7d32" if pct >= target else "#f57f17" if pct >= target * 0.7 else "#c62828"
+        status = "✓" if pct >= target * 0.9 else ""
+        return (
+            f'<div class="kpi-row">'
+            f'<span class="kpi-label">{label}</span>'
+            f'<div class="kpi-bar-track"><div class="kpi-bar-fill" style="width:{pct}%;background:{color}"></div></div>'
+            f'<span class="kpi-value">{value:.0f}% {status}</span>'
+            f'</div>'
+        )
+
+    if has_kpi:
+        cov_val = float(ri_sp_cov.get("value", "0").replace("%", "")) if isinstance(ri_sp_cov.get("value"), str) else 0
+        util_val = float(ri_sp_util.get("value", "0").replace("%", "")) if isinstance(ri_sp_util.get("value"), str) else 0
+        if cov_val > 0:
+            parts.append(_bar("RI/SP Coverage", cov_val, 80, 25, ri_sp_cov.get("score", 0)))
+        if util_val > 0:
+            parts.append(_bar("RI/SP Utilization", util_val, 90, 25, ri_sp_util.get("score", 0)))
+
+    # On-demand / committed summary
+    if has_mix:
+        parts.append(
+            f'<div class="commitment-summary">'
+            f'<span class="cs-item">Committed: <strong>{committed_pct:.0f}%</strong></span>'
+            f'<span class="cs-item">On-Demand: <strong>{on_demand_pct:.0f}%</strong></span>'
+            f'<span class="cs-item">Spot: <strong>{spot_pct:.0f}%</strong></span>'
+            f'</div>'
+        )
+
+    # Assessment
+    if on_demand_pct > 70:
+        parts.append('<p class="kpi-assessment">Heavy on-demand exposure — consider Savings Plans or Reserved Instances.</p>')
+    elif committed_pct > 60:
+        parts.append('<p class="kpi-assessment">Good commitment coverage.</p>')
+
+    if not parts:
+        return ""
+
+    return (
+        '<h2 class="section-title">Commitment Health</h2>\n'
+        '<div class="commitment-health">\n'
+        + "\n".join(parts) +
+        '\n</div>'
+    )
+
+
+def _build_spend_concentration(results: dict) -> str:
+    """Build Spend Concentration section (renamed from HHI, no jargon)."""
+    cost_result = results.get("cost") or {}
+    if cost_result.get("skipped"):
+        return ""
+
+    metadata = cost_result.get("metadata") or {}
+    hhi = metadata.get("hhi_concentration") or {}
+    top_services = hhi.get("top_services", [])
+
+    if not top_services:
+        return ""
+
+    # Build service bars
+    svc_bars: list[str] = []
+    for svc in top_services[:5]:
+        name = html.escape(str(svc.get("service", "")))
+        pct = svc.get("pct", 0)
+        svc_bars.append(
+            f'<div class="conc-row">'
+            f'<span class="conc-name">{name}</span>'
+            f'<div class="conc-bar-track"><div class="conc-bar-fill" style="width:{pct}%"></div></div>'
+            f'<span class="conc-pct">{pct:.0f}%</span>'
+            f'</div>'
+        )
+
+    # Plain-English interpretation
+    interpretation = ""
+    if top_services:
+        top_svc = top_services[0]
+        top_name = top_svc.get("service", "")
+        top_pct = top_svc.get("pct", 0)
+        if top_pct > 60:
+            interpretation = f'<p class="conc-note">{html.escape(top_name)} represents {top_pct:.0f}% of spend. Review compute purchasing, rightsizing, and architecture opportunities first.</p>'
+        elif top_pct > 40:
+            interpretation = f'<p class="conc-note">{html.escape(top_name)} is the largest cost driver at {top_pct:.0f}%. Spend is moderately diversified.</p>'
+        else:
+            interpretation = '<p class="conc-note">Spend is well-diversified across services.</p>'
+
+    return (
+        '<h2 class="section-title">Spend Concentration</h2>\n'
+        '<div class="spend-concentration">\n'
+        + "\n".join(svc_bars) + "\n"
+        + interpretation +
+        '\n</div>'
+    )
+
+
+def _build_spend_trend(results: dict) -> str:
+    """Build Spend Trend section (renamed from Cost Velocity, no jargon)."""
+    cost_result = results.get("cost") or {}
+    if cost_result.get("skipped"):
+        return ""
+
+    metadata = cost_result.get("metadata") or {}
+    velocity = metadata.get("cost_velocity") or {}
+    daily_costs = velocity.get("daily_costs", [])
+
+    if not velocity or velocity.get("trend") in ("no data", "insufficient data", None):
+        return ""
+
+    daily_avg = velocity.get("daily_avg", 0)
+    vel_pct = velocity.get("velocity_pct", 0)
+    trend = velocity.get("trend", "stable")
+
+    # Sparkline
+    sparkline_svg = ""
+    if daily_costs and len(daily_costs) >= 3:
+        vel = velocity.get("velocity", 0)
+        if vel > 0:
+            spark_color = "#ef5350"
+        elif vel < 0:
+            spark_color = "#66bb6a"
+        else:
+            spark_color = "#1565c0"
+        sparkline_svg = generate_svg_sparkline(daily_costs, width=320, height=60, color=spark_color)
+
+    # Simple trend language
+    if abs(vel_pct) < 0.5:
+        trend_text = "Stable"
+    elif vel_pct > 0:
+        trend_text = f"Increasing (+{vel_pct:.1f}%/day)"
+    else:
+        trend_text = f"Decreasing ({vel_pct:.1f}%/day)"
+
+    return (
+        '<h2 class="section-title">Spend Trend</h2>\n'
+        '<div class="spend-trend">\n'
+        f'<div class="trend-metrics">'
+        f'<span class="trend-item">Daily average: <strong>${daily_avg:,.0f}</strong></span>'
+        f'<span class="trend-item">Trend: <strong>{trend_text}</strong></span>'
+        f'</div>\n'
+        f'<div class="trend-sparkline">{sparkline_svg}</div>\n'
+        '</div>'
+    )
+
+
+def _build_detailed_breakdown(results: dict, ran_packs: list) -> str:
+    """Build Detailed Breakdown — only show packs that actually ran."""
+    if not ran_packs:
+        return ""
+
+    sections: list[str] = []
+    for key in ran_packs:
+        result = results.get(key, {})
+        scores = result.get("scores", {})
+        label = TOOL_LABELS.get(key, key)
+        icon = TOOL_ICONS.get(key, "")
+        score = scores.get("overall_score", 0)
+        grade = scores.get("grade", "N/A")
+        errors = result.get("errors", [])
+        color = _grade_color(grade)
+        bar = _svg_bar(score, width=300, height=14)
+
+        # Build breakdown rows
+        meta_keys = {"overall_score", "grade", "total_findings", "severity_counts"}
+        breakdown_rows: list[str] = []
+        for k, v in scores.items():
+            if k in meta_keys:
+                continue
+            if isinstance(v, (int, float)):
+                sub_bar = _svg_bar(int(v), width=200, height=10)
+                breakdown_rows.append(
+                    f'<tr><td class="detail-label">{html.escape(str(k))}</td>'
+                    f'<td class="detail-score">{v}</td><td>{sub_bar}</td></tr>'
+                )
+
+        breakdown_table = ""
+        if breakdown_rows:
+            breakdown_table = (
+                '<table class="breakdown-table">'
+                '<thead><tr><th>Category</th><th>Score</th><th></th></tr></thead>'
+                '<tbody>' + "\n".join(breakdown_rows) + '</tbody></table>'
+            )
+
+        # Cost pack gets findings inline
+        pack_extras = ""
+        if key == "cost":
+            pack_extras = _build_cost_findings_section(result)
+
+        error_html = ""
+        if errors:
+            error_items = "\n".join(f"<li>{html.escape(str(e))}</li>" for e in errors)
+            error_html = f'<div class="error-list"><strong>Errors:</strong><ul>{error_items}</ul></div>'
+
+        sections.append(
+            f'<details class="tool-detail">'
+            f'<summary>'
+            f'<span class="detail-icon">{icon}</span>'
+            f'<span class="detail-name">{html.escape(label)}</span>'
+            f'<span class="detail-grade" style="color:{color}">{html.escape(grade)}</span>'
+            f'<span class="detail-status">{score}/100</span>'
+            f'</summary>'
+            f'<div class="detail-body">'
+            f'<div class="detail-bar">{bar}</div>'
+            f'{breakdown_table}{pack_extras}{error_html}'
+            f'</div></details>'
+        )
+
+    return "\n".join(sections)
+
+
 # ---------------------------------------------------------------------------
 # CSS
 # ---------------------------------------------------------------------------
@@ -829,6 +1193,53 @@ body {
 .error-list { background: var(--bg-secondary); border-radius: 6px; padding: 10px 14px; font-size: 0.82rem; }
 .error-list ul { margin: 4px 0 0 18px; }
 .error-list li { margin-bottom: 2px; }
+
+/* Executive Summary */
+.exec-summary { margin-bottom: 32px; }
+.exec-text { font-size: 0.95rem; line-height: 1.8; color: var(--text-primary); max-width: 700px; }
+.exec-text strong { color: var(--text-primary); font-weight: 700; }
+
+/* What To Do Next (actions table) */
+.actions-table {
+  width: 100%; border-collapse: collapse; margin-bottom: 32px;
+  background: var(--bg-card); border: 1px solid var(--border-color);
+  border-radius: 8px; overflow: hidden; box-shadow: var(--shadow); font-size: 0.88rem;
+}
+.actions-table thead th {
+  text-align: left; padding: 10px 12px; background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color); color: var(--text-secondary);
+  font-weight: 600; font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.actions-table tbody td { padding: 10px 12px; border-bottom: 1px solid var(--border-color); vertical-align: top; }
+.actions-table tbody tr:last-child td { border-bottom: none; }
+.action-rank { font-weight: 700; color: var(--text-secondary); width: 32px; }
+.action-title { font-weight: 600; margin-bottom: 4px; line-height: 1.4; }
+.action-rec { color: var(--text-secondary); font-size: 0.83rem; line-height: 1.4; }
+.action-impact { font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 600; }
+.action-effort { color: var(--text-secondary); white-space: nowrap; }
+
+/* Commitment Health */
+.commitment-health { margin-bottom: 32px; }
+.commitment-summary { display: flex; gap: 20px; margin: 12px 0; font-size: 0.88rem; }
+.cs-item { color: var(--text-secondary); }
+.cs-item strong { color: var(--text-primary); }
+.kpi-assessment { font-size: 0.85rem; color: var(--text-secondary); font-style: italic; margin-top: 8px; }
+
+/* Spend Concentration */
+.spend-concentration { margin-bottom: 32px; }
+.conc-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 0.85rem; }
+.conc-name { min-width: 180px; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.conc-bar-track { flex: 1; height: 10px; background: var(--track-color); border-radius: 5px; }
+.conc-bar-fill { height: 100%; background: #1565c0; border-radius: 5px; }
+.conc-pct { min-width: 40px; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.conc-note { font-size: 0.85rem; color: var(--text-secondary); margin-top: 12px; line-height: 1.6; }
+
+/* Spend Trend */
+.spend-trend { margin-bottom: 32px; }
+.trend-metrics { display: flex; gap: 24px; margin-bottom: 12px; font-size: 0.88rem; }
+.trend-item { color: var(--text-secondary); }
+.trend-item strong { color: var(--text-primary); }
+.trend-sparkline { margin: 8px 0; }
 
 /* Footer */
 .footer {
@@ -1086,42 +1497,33 @@ _HTML_TEMPLATE = """\
     </div>
   </header>
 
-  <!-- Overall Score Hero -->
-  <section class="hero">
-    {hero_dial}
-    <div class="hero-grade" style="color:{hero_color}">{overall_grade}</div>
-    <div class="hero-label">Overall Operations Score</div>
-  </section>
+  <!-- Executive Summary -->
+  {executive_summary}
 
-  <!-- Tool Scorecards -->
-  <h2 class="section-title">Tool Scores</h2>
-  <div class="tool-grid">
-    {tool_cards}
-  </div>
+  <!-- What To Do Next -->
+  {what_to_do_next}
 
-  <!-- Severity Summary -->
-  <h2 class="section-title">Severity Summary</h2>
-  <div class="severity-row">
-    {severity_summary}
-  </div>
+  <!-- Addressable Savings -->
+  {addressable_savings}
 
-  <!-- Top Actions (Phase 6C-2; renders empty string when no findings) -->
-  {top_actions_section}
+  <!-- Commitment Health -->
+  {commitment_health}
 
-  <!-- Commitment KPIs -->
-  {commitment_kpi_section}
+  <!-- Spend Concentration -->
+  {spend_concentration}
 
-  <!-- Money on Fire (total addressable savings) -->
-  {money_on_fire_section}
+  <!-- Spend Trend -->
+  {spend_trend}
 
-  <!-- Per-Tool Details -->
-  <h2 class="section-title">Detailed Results</h2>
-  {tool_details}
+  <!-- Detailed Breakdown -->
+  <h2 class="section-title">Detailed Breakdown</h2>
+  {detailed_breakdown}
 
   <!-- Footer -->
   <footer class="footer">
     Generated by Kulshan v{version}<br>
     {timestamp}<br>
+    {score_label}: {overall_score}/100 ({overall_grade})<br>
     This report was generated locally. No data was sent to external services.
   </footer>
 
