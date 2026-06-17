@@ -13,8 +13,8 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-IAM_DIR = REPO_ROOT / "Kulshan" / "iam"
-COMPOSED_PATH = IAM_DIR / "Kulshan-readonly.json"
+IAM_DIR = REPO_ROOT / "kulshan" / "iam"
+COMPOSED_PATH = IAM_DIR / "kulshan-readonly.json"
 PER_CHECK_DIR = IAM_DIR / "per-check"
 
 WRITE_VERBS = ("Put", "Delete", "Create", "Modify", "Terminate", "Detach", "Attach", "Update")
