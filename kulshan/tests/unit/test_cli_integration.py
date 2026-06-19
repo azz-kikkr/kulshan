@@ -5,6 +5,7 @@ import click
 from click.testing import CliRunner
 
 from kulshan.cli import main
+from kulshan.__version__ import __version__
 
 
 class TestMainGroup:
@@ -40,11 +41,11 @@ class TestCLIRunner:
         result = runner.invoke(main, ["--help"])
         assert "Kulshan" in result.output
 
-    def test_version_shows_0_1_0(self):
+    def test_version_shows_current(self):
         runner = CliRunner()
         result = runner.invoke(main, ["--version"])
         assert result.exit_code == 0
-        assert "0.1.0" in result.output
+        assert __version__ in result.output
 
     def test_setup_completion_bash(self):
         runner = CliRunner()
