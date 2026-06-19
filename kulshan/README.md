@@ -6,7 +6,7 @@ Generate a local AWS audit report in minutes.
 
 ```bash
 pip install kulshan
-aws sso login
+aws login
 kulshan report
 ```
 
@@ -47,7 +47,7 @@ Requires Python 3.9+. macOS, Linux, Windows.
 Kulshan uses the same AWS credentials as the AWS CLI.
 
 ```bash
-aws sso login
+aws login
 kulshan report
 ```
 
