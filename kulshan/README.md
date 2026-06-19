@@ -44,11 +44,25 @@ Requires Python 3.9+. macOS, Linux, Windows.
 
 ## AWS Credentials
 
-Kulshan uses the same AWS credentials as the AWS CLI.
+Kulshan uses your existing AWS CLI credentials.
+
+Recommended:
 
 ```bash
 aws login
 kulshan report
+```
+
+If your AWS CLI does not support `aws login`, use:
+
+```bash
+aws sso login
+```
+
+or configure credentials with:
+
+```bash
+aws configure
 ```
 
 [Credential setup docs](https://github.com/azz-kikkr/kulshan/tree/master/docs)
