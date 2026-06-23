@@ -42,6 +42,7 @@ dependencies = [
     "tomli>=2.0; python_version<'3.11'",
     "pandas>=2.2.0",
     "numpy>=1.23.0",
+    "duckdb>=1.0.0",
     "plotext>=5.2.0",
     "networkx>=3.0",
     "awscrt>=0.19",

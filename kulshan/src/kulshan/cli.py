@@ -406,6 +406,86 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
 # per-pack invocation as `Kulshan scan <pack>` calling the new run_scan API.
 
 
+@main.group()
+def investigate() -> None:
+    """Investigate a specific cloud cost movement from local evidence."""
+
+
+@investigate.command("ec2")
+@click.option(
+    "--cur",
+    "cur_path",
+    required=True,
+    type=click.Path(exists=True, file_okay=True, dir_okay=True),
+    help="Local CUR/Data Exports Parquet file or directory.",
+)
+def investigate_ec2(cur_path: str) -> None:
+    """Produce a local EC2 investigation brief from Parquet CUR data."""
+    from rich.console import Console as RichConsole
+    from rich.table import Table
+
+    from kulshan.investigate.ec2_cur import CurInvestigationError, investigate_ec2_cur
+
+    console = RichConsole()
+    try:
+        brief = investigate_ec2_cur(cur_path)
+    except CurInvestigationError as exc:
+        console.print(f"[red]Cannot investigate EC2 CUR data: {exc}[/red]")
+        sys.exit(ExitCode.CONFIG_ERROR)
+
+    delta_prefix = "+" if brief.delta >= 0 else "-"
+    delta_abs = abs(brief.delta)
+    pct = "n/a" if brief.delta_percent is None else f"{brief.delta_percent:+.1f}%"
+
+    console.print()
+    console.print("[bold]EC2 Investigation Brief[/bold]")
+    console.print(f"Period: {brief.previous_period} -> {brief.current_period}")
+    console.print(f"Previous period cost: ${brief.previous_cost:,.2f}")
+    console.print(f"Current period cost:  ${brief.current_cost:,.2f}")
+    console.print(f"Delta: {delta_prefix}${delta_abs:,.2f} ({pct})")
+    console.print()
+
+    resources = Table(title="Top Contributing Resources", show_lines=False)
+    resources.add_column("Resource")
+    resources.add_column("Previous", justify="right")
+    resources.add_column("Current", justify="right")
+    resources.add_column("Delta", justify="right")
+    for row in brief.top_resources:
+        resources.add_row(
+            row.name,
+            f"${row.previous_cost:,.2f}",
+            f"${row.current_cost:,.2f}",
+            _format_money_delta(row.delta),
+        )
+    console.print(resources)
+    console.print()
+
+    usage = Table(title="Top Usage Types", show_lines=False)
+    usage.add_column("Usage type")
+    usage.add_column("Previous", justify="right")
+    usage.add_column("Current", justify="right")
+    usage.add_column("Delta", justify="right")
+    for row in brief.top_usage_types:
+        usage.add_row(
+            row.name,
+            f"${row.previous_cost:,.2f}",
+            f"${row.current_cost:,.2f}",
+            _format_money_delta(row.delta),
+        )
+    console.print(usage)
+    console.print()
+
+    console.print("[bold]Review Questions[/bold]")
+    for index, question in enumerate(brief.review_questions, start=1):
+        console.print(f"{index}. {question}")
+    console.print()
+
+
+def _format_money_delta(value: float) -> str:
+    prefix = "+" if value >= 0 else "-"
+    return f"{prefix}${abs(value):,.2f}"
+
+
 @main.command()
 @click.option("--input", "-i", "input_file", required=True, type=click.Path(exists=True), help="Path to a previous JSON scan result.")
 @click.option(
