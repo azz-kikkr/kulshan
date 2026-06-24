@@ -409,6 +409,116 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
 
 
 @main.group()
+def cur() -> None:
+    """Inspect local CUR/Data Exports evidence."""
+
+
+@cur.command("schema")
+@click.option(
+    "--path",
+    "cur_path",
+    required=True,
+    type=click.Path(exists=True, file_okay=True, dir_okay=True),
+    help="Local CUR/Data Exports Parquet file or directory.",
+)
+def cur_schema(cur_path: str) -> None:
+    """Show the resolved schema mapping for local CUR Parquet data."""
+    from rich.console import Console as RichConsole
+    from rich.table import Table
+
+    from kulshan.cur.duckdb_engine import (
+        connect_memory,
+        cur_raw_columns,
+        register_cur_raw,
+    )
+    from kulshan.cur.errors import CurDataError
+    from kulshan.cur.source import local_parquet_source
+
+    console = RichConsole()
+    try:
+        source = local_parquet_source(cur_path)
+        con = connect_memory()
+        try:
+            mapping = register_cur_raw(con, source)
+            columns = cur_raw_columns(con)
+        finally:
+            con.close()
+    except CurDataError as exc:
+        console.print(f"[red]Cannot inspect CUR schema: {exc}[/red]")
+        sys.exit(ExitCode.CONFIG_ERROR)
+
+    table = Table(title="CUR Schema Mapping", show_lines=False)
+    table.add_column("Semantic field")
+    table.add_column("Source column")
+    table.add_column("Required")
+    rows = [
+        ("usage_start", mapping.usage_start, "yes"),
+        ("cost", mapping.cost, "yes"),
+        ("service", mapping.service, "yes"),
+        ("usage_type", mapping.usage_type, "yes"),
+        (
+            "resource_id",
+            mapping.resource_id or "(missing; resource contributors unavailable)",
+            "no",
+        ),
+    ]
+    for semantic, source_column, required in rows:
+        table.add_row(semantic, source_column, required)
+
+    console.print(table)
+    console.print(f"[dim]Detected {len(columns)} column(s).[/dim]")
+
+
+@cur.command("validate")
+@click.option(
+    "--path",
+    "cur_path",
+    required=True,
+    type=click.Path(exists=True, file_okay=True, dir_okay=True),
+    help="Local CUR/Data Exports Parquet file or directory.",
+)
+def cur_validate(cur_path: str) -> None:
+    """Validate that local CUR Parquet data can support EC2 investigation."""
+    from rich.console import Console as RichConsole
+
+    from kulshan.cur.duckdb_engine import (
+        connect_memory,
+        create_ec2_view,
+        register_cur_raw,
+    )
+    from kulshan.cur.errors import CurDataError
+    from kulshan.cur.source import local_parquet_source
+
+    console = RichConsole()
+    try:
+        source = local_parquet_source(cur_path)
+        con = connect_memory()
+        try:
+            mapping = register_cur_raw(con, source)
+            create_ec2_view(con, mapping)
+            ec2_rows = con.execute("SELECT COUNT(*) FROM cur_ec2").fetchone()[0]
+            periods = con.execute("SELECT COUNT(DISTINCT period) FROM cur_ec2").fetchone()[0]
+            if ec2_rows == 0:
+                raise CurDataError("No EC2 rows found in the local CUR export.")
+            if periods < 2:
+                raise CurDataError("Need at least two EC2 periods for investigation.")
+        finally:
+            con.close()
+    except CurDataError as exc:
+        console.print(f"[red]CUR validation failed: {exc}[/red]")
+        sys.exit(ExitCode.CONFIG_ERROR)
+    except Exception as exc:
+        console.print(f"[red]CUR validation failed: {exc}[/red]")
+        sys.exit(ExitCode.CONFIG_ERROR)
+
+    console.print("[green]CUR validation passed.[/green]")
+    console.print(f"[dim]EC2 rows: {ec2_rows}; EC2 periods: {periods}[/dim]")
+    if mapping.resource_id is None:
+        console.print(
+            "[yellow]resource_id column missing; resource-level contributors unavailable.[/yellow]"
+        )
+
+@main.group()
 def investigate() -> None:
     """Investigate a specific cloud cost movement from local evidence."""
 

@@ -25,8 +25,13 @@ def register_cur_raw(con: Any, parquet_source: str) -> CurColumnMapping:
         "CREATE VIEW cur_raw AS "
         f"SELECT * FROM read_parquet({_sql_string(parquet_source)}, union_by_name = true)"
     )
-    columns = _columns(con)
-    return resolve_cur_columns(columns)
+    return resolve_cur_columns(cur_raw_columns(con))
+
+
+def cur_raw_columns(con: Any) -> set[str]:
+    """Return lower-cased raw CUR column names from the registered view."""
+    rows = con.execute("DESCRIBE cur_raw").fetchall()
+    return {str(row[0]).lower() for row in rows}
 
 
 def create_ec2_view(con: Any, mapping: CurColumnMapping) -> None:
@@ -49,11 +54,6 @@ def create_ec2_view(con: Any, mapping: CurColumnMapping) -> None:
           AND CAST({mapping.cost} AS DOUBLE) IS NOT NULL
         """
     )
-
-
-def _columns(con: Any) -> set[str]:
-    rows = con.execute("DESCRIBE cur_raw").fetchall()
-    return {str(row[0]).lower() for row in rows}
 
 
 def _service_filter(service_column: str) -> str:

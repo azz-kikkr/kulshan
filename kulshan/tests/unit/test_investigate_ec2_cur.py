@@ -49,6 +49,23 @@ def test_cur_schema_resolves_athena_style_aliases() -> None:
     )
 
 
+def test_cur_schema_cli_outputs_mapping() -> None:
+    result = CliRunner().invoke(main, ["cur", "schema", "--path", str(_sample_cur_path())])
+
+    assert result.exit_code == 0
+    assert "CUR Schema Mapping" in result.output
+    assert "usage_start" in result.output
+    assert "line_item_usage_start_date" in result.output
+    assert "resource_id" in result.output
+
+
+def test_cur_validate_cli_accepts_sample_cur() -> None:
+    result = CliRunner().invoke(main, ["cur", "validate", "--path", str(_sample_cur_path())])
+
+    assert result.exit_code == 0
+    assert "CUR validation passed" in result.output
+    assert "EC2 rows:" in result.output
+
 def test_investigate_ec2_cli_outputs_readable_brief() -> None:
     result = CliRunner().invoke(main, ["investigate", "ec2", "--cur", str(_sample_cur_path())])
 
@@ -60,3 +77,4 @@ def test_investigate_ec2_cli_outputs_readable_brief() -> None:
     assert "i-prod-a" in result.output
     assert "BoxUsage:m6i.4xlarge" in result.output
     assert "Review Questions" in result.output
+
