@@ -7,14 +7,14 @@ from click.testing import CliRunner
 
 from kulshan.cli import main
 from kulshan.cur.schema import CurColumnMapping, resolve_cur_columns
-from kulshan.investigate.ec2_cur import investigate_ec2_cur
+from kulshan.investigate.ec2_cur import CurInvestigationError, investigate_ec2_cur
 
 
 def _sample_cur_path() -> Path:
     return Path(__file__).resolve().parents[1] / "fixtures" / "cur" / "sample-cur"
 
 
-def test_investigate_ec2_cur_calculates_period_delta() -> None:
+def test_investigate_ec2_cur_calculates_latest_period_delta_by_default() -> None:
     brief = investigate_ec2_cur(str(_sample_cur_path()))
 
     assert brief.previous_period == "2026-05"
@@ -29,6 +29,42 @@ def test_investigate_ec2_cur_calculates_period_delta() -> None:
     assert brief.evidence_available[0].label == "CUR/Data Exports Parquet"
     assert "Owner tags" in {item.label for item in brief.evidence_missing}
     assert len(brief.review_questions) == 3
+
+
+def test_investigate_ec2_cur_uses_selected_month() -> None:
+    brief = investigate_ec2_cur(str(_sample_cur_path()), month="2026-06")
+
+    assert brief.previous_period == "2026-05"
+    assert brief.current_period == "2026-06"
+    assert brief.previous_cost == 200.0
+    assert brief.current_cost == 520.0
+
+
+def test_investigate_ec2_cur_rejects_invalid_month() -> None:
+    try:
+        investigate_ec2_cur(str(_sample_cur_path()), month="2026-6")
+    except CurInvestigationError as exc:
+        assert "YYYY-MM" in str(exc)
+    else:
+        raise AssertionError("Expected invalid month to fail")
+
+
+def test_investigate_ec2_cur_fails_when_selected_month_is_missing() -> None:
+    try:
+        investigate_ec2_cur(str(_sample_cur_path()), month="2026-07")
+    except CurInvestigationError as exc:
+        assert "selected month 2026-07" in str(exc)
+    else:
+        raise AssertionError("Expected missing selected month to fail")
+
+
+def test_investigate_ec2_cur_fails_when_previous_month_is_missing() -> None:
+    try:
+        investigate_ec2_cur(str(_sample_cur_path()), month="2026-05")
+    except CurInvestigationError as exc:
+        assert "previous month 2026-04" in str(exc)
+    else:
+        raise AssertionError("Expected missing previous month to fail")
 
 
 def test_cur_schema_resolves_athena_style_aliases() -> None:
@@ -68,6 +104,7 @@ def test_cur_validate_cli_accepts_sample_cur() -> None:
     assert "CUR validation passed" in result.output
     assert "EC2 rows:" in result.output
 
+
 def test_investigate_ec2_cli_outputs_readable_brief() -> None:
     result = CliRunner().invoke(main, ["investigate", "ec2", "--cur", str(_sample_cur_path())])
 
@@ -82,3 +119,20 @@ def test_investigate_ec2_cli_outputs_readable_brief() -> None:
     assert "Evidence Missing" in result.output
     assert "Review Questions" in result.output
 
+
+def test_investigate_ec2_cli_accepts_selected_month() -> None:
+    result = CliRunner().invoke(
+        main, ["investigate", "ec2", "--cur", str(_sample_cur_path()), "--month", "2026-06"]
+    )
+
+    assert result.exit_code == 0
+    assert "Period: 2026-05 -> 2026-06" in result.output
+
+
+def test_investigate_ec2_cli_reports_invalid_month() -> None:
+    result = CliRunner().invoke(
+        main, ["investigate", "ec2", "--cur", str(_sample_cur_path()), "--month", "2026-6"]
+    )
+
+    assert result.exit_code != 0
+    assert "YYYY-MM" in result.output

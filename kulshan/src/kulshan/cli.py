@@ -531,7 +531,12 @@ def investigate() -> None:
     type=click.Path(exists=True, file_okay=True, dir_okay=True),
     help="Local CUR/Data Exports Parquet file or directory.",
 )
-def investigate_ec2(cur_path: str) -> None:
+@click.option(
+    "--month",
+    default=None,
+    help="Current billing month to investigate in YYYY-MM format. Defaults to latest month.",
+)
+def investigate_ec2(cur_path: str, month: str | None) -> None:
     """Produce a local EC2 investigation brief from Parquet CUR data."""
     from rich.console import Console as RichConsole
     from rich.table import Table
@@ -540,7 +545,7 @@ def investigate_ec2(cur_path: str) -> None:
 
     console = RichConsole()
     try:
-        brief = investigate_ec2_cur(cur_path)
+        brief = investigate_ec2_cur(cur_path, month=month)
     except CurInvestigationError as exc:
         console.print(f"[red]Cannot investigate EC2 CUR data: {exc}[/red]")
         sys.exit(ExitCode.CONFIG_ERROR)
