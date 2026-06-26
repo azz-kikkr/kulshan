@@ -34,6 +34,8 @@ class Ec2InvestigationBrief:
     current_cost: float
     delta: float
     delta_percent: float | None
+    top_accounts: list[DeltaRow]
+    top_regions: list[DeltaRow]
     top_resources: list[DeltaRow]
     top_usage_types: list[DeltaRow]
     evidence_available: list[EvidenceItem]

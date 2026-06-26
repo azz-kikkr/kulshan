@@ -14,6 +14,10 @@ def _sample_cur_path() -> Path:
     return Path(__file__).resolve().parents[1] / "fixtures" / "cur" / "sample-cur"
 
 
+def _account_region_cur_path() -> Path:
+    return Path(__file__).resolve().parents[1] / "fixtures" / "cur" / "account-region-cur"
+
+
 def test_investigate_ec2_cur_calculates_latest_period_delta_by_default() -> None:
     brief = investigate_ec2_cur(str(_sample_cur_path()))
 
@@ -27,7 +31,10 @@ def test_investigate_ec2_cur_calculates_latest_period_delta_by_default() -> None
     assert brief.top_resources[0].delta == 190.0
     assert brief.top_usage_types[0].name == "BoxUsage:m6i.4xlarge"
     assert brief.evidence_available[0].label == "CUR/Data Exports Parquet"
-    assert "Owner tags" in {item.label for item in brief.evidence_missing}
+    missing_labels = {item.label for item in brief.evidence_missing}
+    assert "Account IDs" in missing_labels
+    assert "Regions" in missing_labels
+    assert "Owner tags" in missing_labels
     assert len(brief.review_questions) == 3
 
 
@@ -38,6 +45,42 @@ def test_investigate_ec2_cur_uses_selected_month() -> None:
     assert brief.current_period == "2026-06"
     assert brief.previous_cost == 200.0
     assert brief.current_cost == 520.0
+
+
+def test_investigate_ec2_cur_includes_account_deltas() -> None:
+    brief = investigate_ec2_cur(str(_account_region_cur_path()), month="2026-06")
+
+    assert brief.top_accounts[0].name == "111111111111"
+    assert brief.top_accounts[0].previous_cost == 100.0
+    assert brief.top_accounts[0].current_cost == 250.0
+    assert brief.top_accounts[0].delta == 150.0
+    assert "Account delta" in {item.label for item in brief.evidence_available}
+    assert "Account IDs" not in {item.label for item in brief.evidence_missing}
+
+
+def test_investigate_ec2_cur_includes_region_deltas() -> None:
+    brief = investigate_ec2_cur(str(_account_region_cur_path()), month="2026-06")
+
+    assert brief.top_regions[0].name == "us-east-1"
+    assert brief.top_regions[0].previous_cost == 100.0
+    assert brief.top_regions[0].current_cost == 250.0
+    assert brief.top_regions[0].delta == 150.0
+    assert "Region delta" in {item.label for item in brief.evidence_available}
+    assert "Regions" not in {item.label for item in brief.evidence_missing}
+
+
+def test_investigate_ec2_cur_reports_missing_account_field() -> None:
+    brief = investigate_ec2_cur(str(_sample_cur_path()), month="2026-06")
+
+    assert brief.top_accounts == []
+    assert "Account IDs" in {item.label for item in brief.evidence_missing}
+
+
+def test_investigate_ec2_cur_reports_missing_region_field() -> None:
+    brief = investigate_ec2_cur(str(_sample_cur_path()), month="2026-06")
+
+    assert brief.top_regions == []
+    assert "Regions" in {item.label for item in brief.evidence_missing}
 
 
 def test_investigate_ec2_cur_rejects_invalid_month() -> None:
@@ -127,6 +170,19 @@ def test_investigate_ec2_cli_accepts_selected_month() -> None:
 
     assert result.exit_code == 0
     assert "Period: 2026-05 -> 2026-06" in result.output
+
+
+def test_investigate_ec2_cli_outputs_account_and_region_tables() -> None:
+    result = CliRunner().invoke(
+        main,
+        ["investigate", "ec2", "--cur", str(_account_region_cur_path()), "--month", "2026-06"],
+    )
+
+    assert result.exit_code == 0
+    assert "Top Contributing Accounts" in result.output
+    assert "111111111111" in result.output
+    assert "Top Contributing Regions" in result.output
+    assert "us-east-1" in result.output
 
 
 def test_investigate_ec2_cli_reports_invalid_month() -> None:

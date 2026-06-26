@@ -562,6 +562,38 @@ def investigate_ec2(cur_path: str, month: str | None) -> None:
     console.print(f"Delta: {delta_prefix}${delta_abs:,.2f} ({pct})")
     console.print()
 
+    accounts = Table(title="Top Contributing Accounts", show_lines=False)
+    accounts.add_column("Account")
+    accounts.add_column("Previous", justify="right")
+    accounts.add_column("Current", justify="right")
+    accounts.add_column("Delta", justify="right")
+    for row in brief.top_accounts:
+        accounts.add_row(
+            row.name,
+            f"${row.previous_cost:,.2f}",
+            f"${row.current_cost:,.2f}",
+            _format_money_delta(row.delta),
+        )
+    if brief.top_accounts:
+        console.print(accounts)
+        console.print()
+
+    regions = Table(title="Top Contributing Regions", show_lines=False)
+    regions.add_column("Region")
+    regions.add_column("Previous", justify="right")
+    regions.add_column("Current", justify="right")
+    regions.add_column("Delta", justify="right")
+    for row in brief.top_regions:
+        regions.add_row(
+            row.name,
+            f"${row.previous_cost:,.2f}",
+            f"${row.current_cost:,.2f}",
+            _format_money_delta(row.delta),
+        )
+    if brief.top_regions:
+        console.print(regions)
+        console.print()
+
     resources = Table(title="Top Contributing Resources", show_lines=False)
     resources.add_column("Resource")
     resources.add_column("Previous", justify="right")

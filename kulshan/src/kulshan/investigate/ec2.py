@@ -31,6 +31,16 @@ def investigate_ec2_cur(cur_path: str, month: str | None = None) -> Ec2Investiga
 
         current_period, previous_period = _comparison_periods(con, month)
         totals = _period_totals(con, previous_period, current_period)
+        top_accounts = (
+            _delta_rows(con, "account_id", previous_period, current_period)
+            if mapping.account_id is not None
+            else []
+        )
+        top_regions = (
+            _delta_rows(con, "region", previous_period, current_period)
+            if mapping.region is not None
+            else []
+        )
         top_resources = _delta_rows(con, "resource_id", previous_period, current_period)
         top_usage_types = _delta_rows(con, "usage_type", previous_period, current_period)
 
@@ -47,10 +57,20 @@ def investigate_ec2_cur(cur_path: str, month: str | None = None) -> Ec2Investiga
             current_cost=current_cost,
             delta=delta,
             delta_percent=delta_percent,
+            top_accounts=top_accounts,
+            top_regions=top_regions,
             top_resources=top_resources,
             top_usage_types=top_usage_types,
-            evidence_available=_available_evidence(mapping.resource_id is not None),
-            evidence_missing=_missing_evidence(mapping.resource_id is not None),
+            evidence_available=_available_evidence(
+                has_resource_id=mapping.resource_id is not None,
+                has_account_id=mapping.account_id is not None,
+                has_region=mapping.region is not None,
+            ),
+            evidence_missing=_missing_evidence(
+                has_resource_id=mapping.resource_id is not None,
+                has_account_id=mapping.account_id is not None,
+                has_region=mapping.region is not None,
+            ),
             review_questions=_review_questions(top_resources, top_usage_types),
         )
     except CurInvestigationError:
@@ -173,7 +193,11 @@ def _delta_rows(
     ]
 
 
-def _available_evidence(has_resource_id: bool) -> list[EvidenceItem]:
+def _available_evidence(
+    has_resource_id: bool,
+    has_account_id: bool,
+    has_region: bool,
+) -> list[EvidenceItem]:
     evidence = [
         EvidenceItem("CUR/Data Exports Parquet", "Local billing export was readable."),
         EvidenceItem(
@@ -182,6 +206,10 @@ def _available_evidence(has_resource_id: bool) -> list[EvidenceItem]:
         ),
         EvidenceItem("Usage type delta", "Top EC2 usage type contributors were computed."),
     ]
+    if has_account_id:
+        evidence.append(EvidenceItem("Account delta", "Top EC2 account contributors were computed."))
+    if has_region:
+        evidence.append(EvidenceItem("Region delta", "Top EC2 region contributors were computed."))
     if has_resource_id:
         evidence.append(
             EvidenceItem("Resource ID delta", "Top EC2 resource contributors were computed.")
@@ -189,8 +217,18 @@ def _available_evidence(has_resource_id: bool) -> list[EvidenceItem]:
     return evidence
 
 
-def _missing_evidence(has_resource_id: bool) -> list[EvidenceItem]:
+def _missing_evidence(
+    has_resource_id: bool,
+    has_account_id: bool,
+    has_region: bool,
+) -> list[EvidenceItem]:
     evidence = []
+    if not has_account_id:
+        evidence.append(
+            EvidenceItem("Account IDs", "Export does not expose account-level contributors.")
+        )
+    if not has_region:
+        evidence.append(EvidenceItem("Regions", "Export does not expose region-level contributors."))
     if not has_resource_id:
         evidence.append(
             EvidenceItem("Resource IDs", "Export does not expose resource-level contributors.")

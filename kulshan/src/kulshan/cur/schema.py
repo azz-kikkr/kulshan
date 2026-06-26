@@ -16,6 +16,8 @@ class CurColumnMapping:
     service: str
     usage_type: str
     resource_id: str | None = None
+    account_id: str | None = None
+    region: str | None = None
 
 
 def resolve_cur_columns(columns: set[str]) -> CurColumnMapping:
@@ -58,6 +60,20 @@ def resolve_cur_columns(columns: set[str]) -> CurColumnMapping:
             "line_item_resource_id",
             "lineitem_resourceid",
             "resource_id",
+        ),
+        account_id=_first(
+            normalized,
+            "line_item_usage_account_id",
+            "bill_payer_account_id",
+            "linked_account_id",
+            "usage_account_id",
+        ),
+        region=_first(
+            normalized,
+            "product_region",
+            "line_item_availability_zone",
+            "availability_zone",
+            "region",
         ),
     )
 
