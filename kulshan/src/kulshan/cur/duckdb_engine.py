@@ -39,6 +39,11 @@ def create_ec2_view(con: Any, mapping: CurColumnMapping) -> None:
     resource_expr = _optional_text_expr(mapping.resource_id)
     account_expr = _optional_text_expr(mapping.account_id)
     region_expr = _optional_text_expr(mapping.region)
+    owner_expr = _optional_text_expr(mapping.owner_tag)
+    team_expr = _optional_text_expr(mapping.team_tag)
+    application_expr = _optional_text_expr(mapping.application_tag)
+    cost_center_expr = _optional_text_expr(mapping.cost_center_tag)
+    environment_expr = _optional_text_expr(mapping.environment_tag)
     con.execute(
         f"""
         CREATE VIEW cur_ec2 AS
@@ -48,6 +53,11 @@ def create_ec2_view(con: Any, mapping: CurColumnMapping) -> None:
             COALESCE({resource_expr}, '(no resource id)') AS resource_id,
             COALESCE({account_expr}, '(no account id)') AS account_id,
             COALESCE({region_expr}, '(no region)') AS region,
+            {owner_expr} AS owner_tag,
+            {team_expr} AS team_tag,
+            {application_expr} AS application_tag,
+            {cost_center_expr} AS cost_center_tag,
+            {environment_expr} AS environment_tag,
             CAST({mapping.cost} AS DOUBLE) AS cost
         FROM cur_raw
         WHERE {_service_filter(mapping.service)}

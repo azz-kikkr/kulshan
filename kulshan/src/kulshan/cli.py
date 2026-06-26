@@ -624,6 +624,31 @@ def investigate_ec2(cur_path: str, month: str | None) -> None:
     console.print(usage)
     console.print()
 
+    if brief.tag_coverage is not None:
+        tag_table = Table(title="Current Period Tag Coverage", show_lines=False)
+        tag_table.add_column("Status")
+        tag_table.add_column("Cost", justify="right")
+        tag_table.add_row("Tagged", f"${brief.tag_coverage.tagged_cost:,.2f}")
+        tag_table.add_row("Untagged", f"${brief.tag_coverage.untagged_cost:,.2f}")
+        console.print(tag_table)
+        console.print()
+
+        tag_values = Table(title="Observed Tag Values", show_lines=False)
+        tag_values.add_column("Tag")
+        tag_values.add_column("Values")
+        for label, values in (
+            ("Owner", brief.tag_coverage.owner_values),
+            ("Team", brief.tag_coverage.team_values),
+            ("Application", brief.tag_coverage.application_values),
+            ("Cost center", brief.tag_coverage.cost_center_values),
+            ("Environment", brief.tag_coverage.environment_values),
+        ):
+            if values:
+                tag_values.add_row(label, ", ".join(values))
+        if tag_values.row_count:
+            console.print(tag_values)
+            console.print()
+
     console.print("[bold]Evidence Available[/bold]")
     for item in brief.evidence_available:
         console.print(f"[green][available][/green] {item.label}: {item.detail}")

@@ -18,6 +18,10 @@ def _account_region_cur_path() -> Path:
     return Path(__file__).resolve().parents[1] / "fixtures" / "cur" / "account-region-cur"
 
 
+def _tagged_cur_path() -> Path:
+    return Path(__file__).resolve().parents[1] / "fixtures" / "cur" / "tagged-cur"
+
+
 def test_investigate_ec2_cur_calculates_latest_period_delta_by_default() -> None:
     brief = investigate_ec2_cur(str(_sample_cur_path()))
 
@@ -35,6 +39,8 @@ def test_investigate_ec2_cur_calculates_latest_period_delta_by_default() -> None
     assert "Account IDs" in missing_labels
     assert "Regions" in missing_labels
     assert "Owner tags" in missing_labels
+    assert "Team tags" in missing_labels
+    assert "Application tags" in missing_labels
     assert len(brief.review_questions) == 3
 
 
@@ -83,6 +89,38 @@ def test_investigate_ec2_cur_reports_missing_region_field() -> None:
     assert "Regions" in {item.label for item in brief.evidence_missing}
 
 
+def test_investigate_ec2_cur_reports_tagged_and_untagged_spend() -> None:
+    brief = investigate_ec2_cur(str(_tagged_cur_path()), month="2026-06")
+
+    assert brief.tag_coverage is not None
+    assert brief.tag_coverage.tagged_cost == 250.0
+    assert brief.tag_coverage.untagged_cost == 90.0
+    assert "Tag coverage" in {item.label for item in brief.evidence_available}
+
+
+def test_investigate_ec2_cur_surfaces_owner_team_application_tag_evidence() -> None:
+    brief = investigate_ec2_cur(str(_tagged_cur_path()), month="2026-06")
+
+    assert brief.tag_coverage is not None
+    assert brief.tag_coverage.owner_values == ["platform"]
+    assert brief.tag_coverage.team_values == ["core"]
+    assert brief.tag_coverage.application_values == ["checkout"]
+    available_labels = {item.label for item in brief.evidence_available}
+    assert "Owner tag" in available_labels
+    assert "Team tag" in available_labels
+    assert "Application tag" in available_labels
+
+
+def test_investigate_ec2_cur_reports_missing_owner_team_application_tags() -> None:
+    brief = investigate_ec2_cur(str(_sample_cur_path()), month="2026-06")
+
+    assert brief.tag_coverage is None
+    missing_labels = {item.label for item in brief.evidence_missing}
+    assert "Owner tags" in missing_labels
+    assert "Team tags" in missing_labels
+    assert "Application tags" in missing_labels
+
+
 def test_investigate_ec2_cur_rejects_invalid_month() -> None:
     try:
         investigate_ec2_cur(str(_sample_cur_path()), month="2026-6")
@@ -118,6 +156,11 @@ def test_cur_schema_resolves_athena_style_aliases() -> None:
             "product_servicecode",
             "lineitem_usagetype",
             "lineitem_resourceid",
+            "resource_tags_user_owner",
+            "resource_tags_user_team",
+            "resource_tags_user_app",
+            "resource_tags_user_cost_center",
+            "resource_tags_user_environment",
         }
     )
 
@@ -127,6 +170,11 @@ def test_cur_schema_resolves_athena_style_aliases() -> None:
         service="product_servicecode",
         usage_type="lineitem_usagetype",
         resource_id="lineitem_resourceid",
+        owner_tag="resource_tags_user_owner",
+        team_tag="resource_tags_user_team",
+        application_tag="resource_tags_user_app",
+        cost_center_tag="resource_tags_user_cost_center",
+        environment_tag="resource_tags_user_environment",
     )
 
 
@@ -183,6 +231,18 @@ def test_investigate_ec2_cli_outputs_account_and_region_tables() -> None:
     assert "111111111111" in result.output
     assert "Top Contributing Regions" in result.output
     assert "us-east-1" in result.output
+
+
+def test_investigate_ec2_cli_outputs_tag_coverage() -> None:
+    result = CliRunner().invoke(
+        main, ["investigate", "ec2", "--cur", str(_tagged_cur_path()), "--month", "2026-06"]
+    )
+
+    assert result.exit_code == 0
+    assert "Tagged" in result.output
+    assert "Untagged" in result.output
+    assert "Observed Tag Values" in result.output
+    assert "platform" in result.output
 
 
 def test_investigate_ec2_cli_reports_invalid_month() -> None:

@@ -24,6 +24,19 @@ class EvidenceItem:
 
 
 @dataclass(frozen=True)
+class TagCoverage:
+    """Current-period tag coverage for the investigated EC2 slice."""
+
+    tagged_cost: float
+    untagged_cost: float
+    owner_values: list[str]
+    team_values: list[str]
+    application_values: list[str]
+    cost_center_values: list[str]
+    environment_values: list[str]
+
+
+@dataclass(frozen=True)
 class Ec2InvestigationBrief:
     """The deterministic evidence needed for the first EC2 brief."""
 
@@ -38,6 +51,7 @@ class Ec2InvestigationBrief:
     top_regions: list[DeltaRow]
     top_resources: list[DeltaRow]
     top_usage_types: list[DeltaRow]
+    tag_coverage: TagCoverage | None
     evidence_available: list[EvidenceItem]
     evidence_missing: list[EvidenceItem]
     review_questions: list[str]

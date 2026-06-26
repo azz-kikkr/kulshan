@@ -18,6 +18,11 @@ class CurColumnMapping:
     resource_id: str | None = None
     account_id: str | None = None
     region: str | None = None
+    owner_tag: str | None = None
+    team_tag: str | None = None
+    application_tag: str | None = None
+    cost_center_tag: str | None = None
+    environment_tag: str | None = None
 
 
 def resolve_cur_columns(columns: set[str]) -> CurColumnMapping:
@@ -75,6 +80,20 @@ def resolve_cur_columns(columns: set[str]) -> CurColumnMapping:
             "availability_zone",
             "region",
         ),
+        owner_tag=_first(
+            normalized,
+            "resource_tags_user_owner",
+            "resource_tags_aws_createdby",
+        ),
+        team_tag=_first(normalized, "resource_tags_user_team"),
+        application_tag=_first(
+            normalized,
+            "resource_tags_user_application",
+            "resource_tags_user_app",
+            "resource_tags_user_service",
+        ),
+        cost_center_tag=_first(normalized, "resource_tags_user_cost_center"),
+        environment_tag=_first(normalized, "resource_tags_user_environment"),
     )
 
 
