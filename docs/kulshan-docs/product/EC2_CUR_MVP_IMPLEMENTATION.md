@@ -31,6 +31,28 @@ Question
 
 The product artifact is the investigation brief.
 
+
+## Current implementation status
+
+Implemented now:
+
+```bash
+kulshan cur schema --path <local-parquet-path>
+kulshan cur validate --path <local-parquet-path>
+kulshan investigate ec2 --cur <local-parquet-path>
+kulshan investigate ec2 --cur <local-parquet-path> --month YYYY-MM
+```
+
+The current EC2 brief reads local Parquet only and reports previous/current cost, delta, account contributors, region contributors, resource contributors, usage type contributors, tag/owner evidence, missing evidence, and review questions.
+
+Not implemented yet:
+
+- S3 `s3://` CUR reads.
+- `kulshan cur top-services`.
+- JSON or Markdown investigation output.
+- SQLite source manifests or investigation run state.
+- Athena, Glue, or dashboard replacement behavior.
+
 ## Required modules
 
 Proposed CLI repository structure:

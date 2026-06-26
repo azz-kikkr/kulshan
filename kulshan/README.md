@@ -78,6 +78,34 @@ kulshan report --packs all              # Full 10-pack diagnostic
 kulshan shell                           # Interactive REPL
 ```
 
+
+## Local CUR/Data Export Investigations
+
+Kulshan is also growing into a local-first FinOps evidence engine for reducing MTTE: Mean Time To Explanation. The first CUR MVP investigates EC2 cost movement from customer-owned billing exports.
+
+```bash
+kulshan cur schema --path ./exports
+kulshan cur validate --path ./exports
+kulshan investigate ec2 --cur ./exports
+kulshan investigate ec2 --cur ./exports --month 2026-06
+```
+
+This path reads local Parquet CUR/Data Export files only. It does not call AWS APIs, upload billing data, require SaaS, or make AWS changes.
+
+The EC2 investigation brief currently includes:
+
+- Previous and current month EC2 cost
+- Absolute and percentage delta
+- Account contributors when account columns exist
+- Region contributors when region/location columns exist
+- Resource contributors when resource IDs exist
+- Usage type contributors
+- Tag and owner evidence from CUR tag columns
+- Missing evidence when fields are absent
+- Review questions for the finance/platform meeting
+
+This is an early CUR MVP: local Parquet only, no S3 path support yet, and terminal output only. It is not a replacement for full CUR/Athena dashboards.
+
 ## Trust & Security
 
 Read-only by design. No write permissions required. Published IAM policy included.
