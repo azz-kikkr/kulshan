@@ -8,9 +8,9 @@
       "autoApprove": [
         "kulshan_doctor",
         "kulshan_report",
-        "kulshan_report_quick",
-        "kulshan_convert",
-        "kulshan_history"
+        "kulshan_investigate_ec2",
+        "kulshan_investigate_cost",
+        "kulshan_cur_validate"
       ]
     }
   }

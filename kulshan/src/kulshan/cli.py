@@ -314,7 +314,7 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
     start = time.time()
     results = run_all_scans(
         session=session, regions=regions, profile=profile, quick=quick, console=console,
-        selected_packs=selected_packs, perf=perf, deep=deep,
+        selected_packs=selected_packs, perf=perf, deep=deep, days=days,
     )
     duration = time.time() - start
 
@@ -723,11 +723,19 @@ def investigate() -> None:
     default=False,
     help="Confirm S3 Parquet scan when the estimate exceeds the configured threshold.",
 )
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(),
+    default=None,
+    help="Write investigation output to .json or .md.",
+)
 def investigate_cost(
     s3_uri: str | None,
     cur_path: str | None,
     month: str,
     confirm_scan: bool,
+    output: str | None,
 ) -> None:
     """Investigate generic monthly cost movement from CUR/Data Export evidence."""
     from rich.console import Console as RichConsole
@@ -741,8 +749,21 @@ def investigate_cost(
         investigate_cost_s3,
         select_cost_column,
     )
+    from kulshan.investigate.export import (
+        cost_result_to_json,
+        cost_result_to_markdown,
+        investigation_format_from_path,
+    )
 
     console = RichConsole()
+    export_format = None
+    if output:
+        try:
+            export_format = investigation_format_from_path(output)
+        except ValueError as exc:
+            click.echo(str(exc), err=True)
+            sys.exit(ExitCode.CONFIG_ERROR)
+
     if bool(s3_uri) == bool(cur_path):
         console.print("[red]Provide exactly one source: --s3 s3://bucket/prefix/ or --path ./cur/.[/red]")
         sys.exit(ExitCode.CONFIG_ERROR)
@@ -804,6 +825,14 @@ def investigate_cost(
         console.print(f"[red]Cost investigation failed: {exc}[/red]")
         sys.exit(ExitCode.CONFIG_ERROR)
 
+    if output:
+        if export_format == "json":
+            content = cost_result_to_json(result, month)
+        else:
+            content = cost_result_to_markdown(result, month)
+        _atomic_write(output, content)
+        console.print(f"Wrote: {output}")
+
     console.print("[bold]Cost Investigation[/bold]")
     console.print(f"Billing month: {month}")
     console.print(f"Total spend: ${result.total_spend:,.2f}")
@@ -827,6 +856,8 @@ def _print_cost_table(console, title: str, rows: tuple[tuple[str, float], ...]) 
     for name, cost in rows:
         table.add_row(name, f"${cost:,.2f}")
     console.print(table)
+
+
 @investigate.command("ec2")
 @click.option(
     "--cur",
@@ -840,19 +871,47 @@ def _print_cost_table(console, title: str, rows: tuple[tuple[str, float], ...]) 
     default=None,
     help="Current billing month to investigate in YYYY-MM format. Defaults to latest month.",
 )
-def investigate_ec2(cur_path: str, month: str | None) -> None:
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(),
+    default=None,
+    help="Write investigation output to .json or .md.",
+)
+def investigate_ec2(cur_path: str, month: str | None, output: str | None) -> None:
     """Produce a local EC2 investigation brief from Parquet CUR data."""
     from rich.console import Console as RichConsole
     from rich.table import Table
 
-    from kulshan.investigate.ec2_cur import CurInvestigationError, investigate_ec2_cur
+    from kulshan.investigate import CurInvestigationError, investigate_ec2_cur
+    from kulshan.investigate.export import (
+        ec2_brief_to_json,
+        ec2_brief_to_markdown,
+        investigation_format_from_path,
+    )
 
     console = RichConsole()
+    export_format = None
+    if output:
+        try:
+            export_format = investigation_format_from_path(output)
+        except ValueError as exc:
+            click.echo(str(exc), err=True)
+            sys.exit(ExitCode.CONFIG_ERROR)
+
     try:
         brief = investigate_ec2_cur(cur_path, month=month)
     except CurInvestigationError as exc:
         console.print(f"[red]Cannot investigate EC2 CUR data: {exc}[/red]")
         sys.exit(ExitCode.CONFIG_ERROR)
+
+    if output:
+        if export_format == "json":
+            content = ec2_brief_to_json(brief)
+        else:
+            content = ec2_brief_to_markdown(brief)
+        _atomic_write(output, content)
+        console.print(f"Wrote: {output}")
 
     delta_prefix = "+" if brief.delta >= 0 else "-"
     delta_abs = abs(brief.delta)
@@ -1144,6 +1203,14 @@ def delete_history(yes: bool) -> None:
     deleted = store.delete_all()
     store.close()
     click.echo(f"Deleted {deleted} scan(s) from {get_history_db_path()}")
+
+
+@main.command("mcp-serve")
+def mcp_serve() -> None:
+    """Serve Kulshan MCP tools over stdio."""
+    from kulshan.mcp_server import run_server
+
+    run_server()
 
 
 @main.command()

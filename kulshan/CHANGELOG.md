@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-07
+
+### Added
+- Local CUR/Data Export schema inspection (`kulshan cur schema --path`)
+- Local CUR/Data Export validation (`kulshan cur validate --path`)
+- Local EC2 investigation brief with period-over-period delta analysis (`kulshan investigate ec2 --cur --month`)
+- Account, region, resource, and usage-type delta breakdowns in EC2 investigation
+- Tag coverage analysis (owner, team, application, cost center, environment tags)
+- S3 readiness check for CUR/Data Export prefixes (`kulshan cur s3-check --s3`)
+- S3-native cost investigation via DuckDB httpfs (`kulshan investigate cost --s3 --month`)
+- Scan byte estimation with user confirmation threshold for S3 queries
+- JSON and Markdown export for investigation commands (`--output file.json` or `--output file.md`)
+
 ## [0.1.3] - 2026-06-18
 
 ### Fixed

@@ -81,7 +81,6 @@ def connect_s3_duckdb() -> Any:
     return con
 
 
-
 def _create_boto3_resolved_secret(con: Any, session, region: str) -> None:
     credentials = session.get_credentials()
     if credentials is None:
@@ -96,6 +95,8 @@ def _create_boto3_resolved_secret(con: Any, session, region: str) -> None:
         f"{_sql_string(frozen.access_key)}, SECRET {_sql_string(frozen.secret_key)}"
         f"{token_sql}, REGION {_sql_string(region)})"
     )
+
+
 def estimate_scan_bytes(
     con: Any, manifest: ManifestIndex, columns: tuple[str, ...]
 ) -> ScanEstimate:

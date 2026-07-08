@@ -7,7 +7,7 @@ from click.testing import CliRunner
 
 from kulshan.cli import main
 from kulshan.cur.schema import CurColumnMapping, resolve_cur_columns
-from kulshan.investigate.ec2_cur import CurInvestigationError, investigate_ec2_cur
+from kulshan.investigate import CurInvestigationError, investigate_ec2_cur
 
 
 def _sample_cur_path() -> Path:

@@ -7,6 +7,7 @@ from typing import Any
 
 from kulshan.cur.duckdb_engine import connect_memory, create_ec2_view, register_cur_raw
 from kulshan.cur.errors import CurDataError
+from kulshan.cur.schema import CurColumnMapping
 from kulshan.cur.source import local_parquet_source
 from kulshan.investigate.errors import CurInvestigationError
 from kulshan.investigate.models import DeltaRow, Ec2InvestigationBrief, EvidenceItem, TagCoverage
@@ -156,7 +157,7 @@ def _require_period_data(con: Any, previous_period: str, current_period: str) ->
         )
 
 
-def _available_tag_columns(mapping: Any) -> list[str]:
+def _available_tag_columns(mapping: CurColumnMapping) -> list[str]:
     columns = []
     if mapping.owner_tag is not None:
         columns.append("owner_tag")
@@ -353,6 +354,7 @@ def _missing_evidence(
         ]
     )
     return evidence
+
 
 def _review_questions(resources: list[DeltaRow], usage_types: list[DeltaRow]) -> list[str]:
     resource = resources[0].name if resources else "the top EC2 resource"

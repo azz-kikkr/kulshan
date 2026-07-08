@@ -143,6 +143,7 @@ def run_all_scans(
     selected_packs: Optional[List[str]] = None,
     perf: bool = False,
     deep: bool = False,
+    days: int = 90,
 ) -> Dict[str, dict]:
     if console is None:
         console = Console()
@@ -215,7 +216,13 @@ def run_all_scans(
                 try:
                     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                         future = executor.submit(
-                            check.run_scan, session, regions, quick=quick, profile=profile, deep=deep
+                            check.run_scan,
+                            session,
+                            regions,
+                            quick=quick,
+                            profile=profile,
+                            deep=deep,
+                            days=days,
                         )
                         results[tool_key] = future.result(timeout=300)
                 except concurrent.futures.TimeoutError:
