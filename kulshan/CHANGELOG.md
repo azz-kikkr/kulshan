@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-07-13
+
+### Fixed
+- Cost column selection now uses null-aware probing in `investigate cost --path`, matching `cur validate` behavior
+- Previously, `investigate cost` would fail with "No cost data found" when `line_item_net_unblended_cost` column existed but was all NULL (common in many CUR exports)
+- Now correctly falls back to `line_item_unblended_cost` (or next available) when preferred column has no data
+- `cost_basis.fallback_note` in JSON output now correctly reflects when a fallback column was used
+
+### Changed
+- Unified cost column selection logic: `cur validate` and `investigate cost` now use the same shared `select_nonnull_cost_column()` function
+- Added `COST_COLUMN_CANDIDATES` constant to `kulshan.cur.schema` for consistent column preference order
+- `CurColumnMapping` dataclass now includes `cost_fallback_note` field to track fallback selection
+
 ## [0.2.2] - 2026-07-13
 
 ### Fixed

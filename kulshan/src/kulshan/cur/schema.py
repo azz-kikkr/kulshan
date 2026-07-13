@@ -3,8 +3,21 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from kulshan.cur.errors import CurDataError
+
+
+# Shared cost column candidates in preference order.
+# Used by both schema resolution and validation to ensure consistency.
+COST_COLUMN_CANDIDATES: tuple[str, ...] = (
+    "line_item_net_unblended_cost",
+    "line_item_unblended_cost",
+    "line_item_blended_cost",
+    "lineitem_unblendedcost",
+    "pricing_public_on_demand_cost",
+    "cost",
+)
 
 
 @dataclass(frozen=True)
@@ -23,6 +36,7 @@ class CurColumnMapping:
     application_tag: str | None = None
     cost_center_tag: str | None = None
     environment_tag: str | None = None
+    cost_fallback_note: str | None = None  # Set when fallback cost column used
 
 
 def resolve_cur_columns(columns: set[str]) -> CurColumnMapping:
@@ -110,3 +124,42 @@ def _first(columns: set[str], *candidates: str) -> str | None:
         if candidate in columns:
             return candidate
     return None
+
+
+def select_nonnull_cost_column(
+    con: Any, columns: set[str]
+) -> tuple[str, str | None]:
+    """Select the first cost column candidate that has non-null data.
+
+    This is the authoritative cost column selector. Both validation and
+    investigation code paths must use this to ensure they pick the same column.
+
+    Args:
+        con: DuckDB connection with cur_raw view registered.
+        columns: Set of available column names (lowercase).
+
+    Returns:
+        Tuple of (selected_column, fallback_note).
+        fallback_note is None if the preferred column was used,
+        otherwise explains which column was used instead.
+
+    Raises:
+        CurDataError: If no supported cost column exists or all are null.
+    """
+    available = [col for col in COST_COLUMN_CANDIDATES if col in columns]
+    if not available:
+        raise CurDataError("No supported CUR cost column found.")
+
+    preferred = available[0]
+    for column in available:
+        count = int(
+            con.execute(
+                f"SELECT COUNT(*) FROM cur_raw WHERE {column} IS NOT NULL"
+            ).fetchone()[0]
+            or 0
+        )
+        if count > 0:
+            note = None if column == preferred else f"{preferred} was null; using {column}."
+            return column, note
+
+    raise CurDataError("Supported CUR cost columns exist but are all null.")

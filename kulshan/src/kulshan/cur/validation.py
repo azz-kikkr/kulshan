@@ -12,15 +12,8 @@ from kulshan.cur.duckdb_engine import (
     register_cur_raw,
 )
 from kulshan.cur.errors import CurDataError
-from kulshan.cur.schema import CurColumnMapping
+from kulshan.cur.schema import CurColumnMapping, select_nonnull_cost_column
 from kulshan.cur.source import local_parquet_source
-
-_COST_COLUMNS = (
-    "line_item_net_unblended_cost",
-    "line_item_unblended_cost",
-    "line_item_blended_cost",
-    "pricing_public_on_demand_cost",
-)
 
 
 @dataclass(frozen=True)
@@ -48,7 +41,9 @@ def validate_local_cur(cur_path: str) -> CurValidationReport:
         mapping = register_cur_raw(con, source)
         columns = cur_raw_columns(con)
         row_count = int(con.execute("SELECT COUNT(*) FROM cur_raw").fetchone()[0] or 0)
-        cost_column, fallback_note = _select_cost_column(con, columns)
+        # Use shared selector - mapping already has cost column from register_cur_raw,
+        # but we call again to get the fallback_note for the report
+        cost_column, fallback_note = select_nonnull_cost_column(con, columns)
         return CurValidationReport(
             readable=True,
             row_count=row_count,
@@ -76,22 +71,6 @@ def validate_ec2_view_possible(cur_path: str) -> int:
         return int(con.execute("SELECT COUNT(*) FROM cur_ec2").fetchone()[0] or 0)
     finally:
         con.close()
-
-
-def _select_cost_column(con: Any, columns: set[str]) -> tuple[str, str | None]:
-    available = [column for column in _COST_COLUMNS if column in columns]
-    if not available:
-        raise CurDataError("No supported CUR cost column found.")
-    for column in available:
-        count = int(
-            con.execute(f"SELECT COUNT(*) FROM cur_raw WHERE {column} IS NOT NULL").fetchone()[0]
-            or 0
-        )
-        if count > 0:
-            first = available[0]
-            note = None if column == first else f"{first} was null; using {column}."
-            return column, note
-    raise CurDataError("Supported CUR cost columns exist but are all null.")
 
 
 def _semantic_fields(mapping: CurColumnMapping) -> tuple[str, ...]:

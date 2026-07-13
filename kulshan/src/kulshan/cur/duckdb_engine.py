@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 from kulshan.cur.errors import CurDataError
-from kulshan.cur.schema import CurColumnMapping, resolve_cur_columns
+from kulshan.cur.schema import CurColumnMapping, resolve_cur_columns, select_nonnull_cost_column
 
 
 def connect_memory() -> Any:
@@ -20,12 +21,25 @@ def connect_memory() -> Any:
 
 
 def register_cur_raw(con: Any, parquet_source: str) -> CurColumnMapping:
-    """Register raw CUR Parquet data and return the resolved column mapping."""
+    """Register raw CUR Parquet data and return the resolved column mapping.
+
+    This function ensures the cost column is selected using null-aware probing,
+    so columns that exist but are entirely NULL are skipped in favor of
+    populated alternatives. This matches the behavior of `cur validate`.
+    """
     con.execute(
         "CREATE VIEW cur_raw AS "
         f"SELECT * FROM read_parquet({_sql_string(parquet_source)}, union_by_name = true)"
     )
-    return resolve_cur_columns(cur_raw_columns(con))
+    columns = cur_raw_columns(con)
+    mapping = resolve_cur_columns(columns)
+
+    # Re-select cost column with null-awareness (may differ from name-only selection)
+    cost_col, fallback_note = select_nonnull_cost_column(con, columns)
+    if cost_col != mapping.cost or fallback_note:
+        mapping = replace(mapping, cost=cost_col, cost_fallback_note=fallback_note)
+
+    return mapping
 
 
 def cur_raw_columns(con: Any) -> set[str]:

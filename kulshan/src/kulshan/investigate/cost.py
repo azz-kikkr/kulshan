@@ -130,7 +130,7 @@ def investigate_cost_cur(
             includes_refunds=False,
             includes_taxes=False,
             amortized="amortized" in mapping.cost.lower(),
-            fallback_note=None,
+            fallback_note=mapping.cost_fallback_note,
         )
 
         # Build provenance
