@@ -83,19 +83,29 @@ def run_scan(session, regions: List[str], *, quick: bool = False, **kwargs) -> d
     from .scanner.database import scan_database
     from .scanner.monitoring import scan_monitoring
     from .scoring.engine import calculate_score
+    from kulshan.parallel import parallel_scanners
 
     if quick:
         regions = regions[:3]
 
     all_orphans: list = []
     all_errors: list[str] = []
-    for fn in [scan_compute, scan_network, scan_storage, scan_database, scan_monitoring]:
-        try:
-            orphans, errors = fn(session, regions)
-            all_orphans.extend(orphans)
-            all_errors.extend(errors)
-        except Exception as e:
-            all_errors.append(f"{fn.__name__}: {e}")
+
+    # Run all scanners in parallel
+    scanners = {
+        "compute": scan_compute,
+        "network": scan_network,
+        "storage": scan_storage,
+        "database": scan_database,
+        "monitoring": scan_monitoring,
+    }
+    
+    results, errors = parallel_scanners(scanners, session, regions)
+    all_errors.extend(errors)
+    
+    for scanner_result in results.values():
+        if isinstance(scanner_result, list):
+            all_orphans.extend(scanner_result)
 
     scores = calculate_score(all_orphans) if all_orphans else {
         "overall_score": 100, "grade": "A+", "total_orphans": 0,

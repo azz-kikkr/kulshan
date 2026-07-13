@@ -118,24 +118,26 @@ def run_scan(session, regions: List[str], *, quick: bool = False, **kwargs) -> d
     from .scanner.dns import scan_dns
     from .scanner.spof import scan_spof
     from .scoring.engine import calculate_score
+    from kulshan.parallel import parallel_scanners
 
     if quick:
         regions = regions[:3]
 
     scan_results: dict = {}
     all_errors: list[str] = []
+
+    # Run all scanners in parallel
     scanners = {
-        "backup": scan_backup, "compute": scan_compute,
-        "database": scan_database, "storage": scan_storage,
-        "dns": scan_dns, "spof": scan_spof,
+        "backup": scan_backup,
+        "compute": scan_compute,
+        "database": scan_database,
+        "storage": scan_storage,
+        "dns": scan_dns,
+        "spof": scan_spof,
     }
-    for name, fn in scanners.items():
-        try:
-            result, errors = fn(session, regions)
-            scan_results[name] = result
-            all_errors.extend(errors)
-        except Exception as e:
-            all_errors.append(f"{name}: {e}")
+    
+    scan_results, errors = parallel_scanners(scanners, session, regions)
+    all_errors.extend(errors)
 
     scores = calculate_score(scan_results)
     findings = _extract_findings(scan_results)

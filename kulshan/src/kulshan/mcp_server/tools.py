@@ -127,6 +127,58 @@ def register_tools(mcp: Any) -> None:
         except Exception as exc:
             return _error(exc, "Check the path points to readable CUR/Data Export Parquet files.")
 
+    @mcp.tool()
+    def kulshan_quick_security(region: str = "us-east-1") -> str:
+        """Fast security scan of a single region. Returns critical/high findings only."""
+        try:
+            from rich.console import Console
+
+            from kulshan.orchestrator import run_all_scans
+            from kulshan.session import create_session
+
+            session = create_session()
+            results = run_all_scans(
+                session=session,
+                regions=[region],
+                quick=True,
+                selected_packs=["security"],
+                console=Console(stderr=True, quiet=True),
+            )
+            
+            # Filter to critical and high only
+            findings = results.get("security", {}).get("findings", [])
+            critical_high = [f for f in findings if f.get("severity") in ("critical", "high")]
+            
+            return _json({
+                "status": "ok",
+                "region": region,
+                "total_findings": len(findings),
+                "critical_high_count": len(critical_high),
+                "findings": [_compact_finding(f) for f in critical_high[:10]],
+            })
+        except Exception as exc:
+            return _error(exc, "Check AWS credentials and try again.")
+
+    @mcp.tool()
+    def kulshan_list_packs() -> str:
+        """List all available Kulshan audit packs with descriptions."""
+        pack_info = {
+            "cost": "AWS cost analysis, anomaly detection (z-score, IQR, MAD)",
+            "security": "Security posture: IAM, network exposure, logging, encryption",
+            "sweep": "Orphaned resource detection: compute, storage, network, database",
+            "dr": "Disaster recovery: backup coverage, multi-AZ, single points of failure",
+            "age": "Lifecycle audit: EOL runtimes, expiring certs, staleness",
+            "drift": "CloudFormation drift, IaC coverage, severity classification",
+            "tag": "Tag compliance, unattributed spend detection",
+            "pulse": "Observability and alarm coverage, blind-spot heatmap",
+            "limit": "Service quota headroom, scaling event planner",
+            "topo": "VPC topology, CIDR overlaps, route integrity",
+        }
+        return _json({
+            "packs": pack_info,
+            "usage": "kulshan_report(packs='security,dr') or packs='all'",
+        })
+
 
 def _parse_packs(packs: str) -> list[str]:
     value = (packs or "cost").strip().lower()
@@ -149,18 +201,41 @@ def _compact_findings_by_pack(results: dict[str, Any]) -> dict[str, list[dict[st
     output: dict[str, list[dict[str, Any]]] = {}
     for pack, result in results.items():
         findings = result.get("findings", []) if isinstance(result, dict) else []
-        output[pack] = [_compact_finding(finding) for finding in findings[:10]]
+        output[pack] = [_compact_finding(finding) for finding in findings[:15]]
     return output
 
 
 def _compact_finding(finding: dict[str, Any]) -> dict[str, Any]:
-    return {
+    """Convert finding to compact format for MCP output.
+    
+    Includes new features: remediation costs, grouping info, severity tuning.
+    """
+    compact = {
         "severity": finding.get("severity"),
         "title": finding.get("title"),
         "service": finding.get("service") or finding.get("resource_type") or finding.get("pack"),
         "dollar_impact": finding.get("estimated_monthly_impact"),
-        "recommendation": finding.get("recommendation") or finding.get("remediation"),
+        "recommendation": finding.get("recommended_action") or finding.get("remediation"),
     }
+    
+    # Include remediation cost estimate if available
+    remediation_cost = finding.get("estimated_remediation_cost")
+    if remediation_cost:
+        compact["remediation_cost_monthly"] = remediation_cost.get("monthly_cost")
+        compact["remediation_cost_desc"] = remediation_cost.get("description")
+    
+    # Include grouping info for deduplicated findings
+    grouped_count = finding.get("grouped_count")
+    if grouped_count and grouped_count > 1:
+        compact["grouped_count"] = grouped_count
+        compact["grouped_resources"] = finding.get("grouped_resources", [])[:5]  # Limit to 5
+    
+    # Include severity adjustment info
+    if finding.get("severity_adjusted"):
+        compact["original_severity"] = finding.get("original_severity")
+        compact["severity_adjusted"] = True
+    
+    return compact
 
 
 def _json(payload: Any) -> str:

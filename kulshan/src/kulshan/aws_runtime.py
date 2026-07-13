@@ -144,6 +144,12 @@ def safe_api_call(client_obj: Any, method: str, **kwargs):
     service, region = _client_identity(client_obj)
     last_error = "Max retries exceeded"
 
+    # Known regional service limitations
+    REGIONAL_LIMITATIONS = {
+        ("iam", "list_service_quotas"): "IAM quotas only available via Service Quotas in us-east-1",
+        ("service-quotas", "list_service_quotas"): "Some services not available in all regions",
+    }
+
     for attempt in range(retries):
         start = time.perf_counter()
         try:
@@ -158,6 +164,7 @@ def safe_api_call(client_obj: Any, method: str, **kwargs):
         except botocore.exceptions.ClientError as exc:
             elapsed = time.perf_counter() - start
             code = exc.response["Error"]["Code"]
+            message = exc.response["Error"]["Message"]
             profiler = get_active_profiler()
             if profiler:
                 profiler.record_call(service, method, region, elapsed, error=True)
@@ -167,13 +174,25 @@ def safe_api_call(client_obj: Any, method: str, **kwargs):
                 continue
             if code in ("AccessDeniedException", "AccessDenied", "UnauthorizedAccess"):
                 return None, f"Access denied: {method}"
-            return None, f"{code}: {exc.response['Error']['Message']}"
+            
+            # Improved error messages for regional limitations
+            if "not available in the current Region" in message:
+                hint = REGIONAL_LIMITATIONS.get((service, method), "")
+                if hint:
+                    return None, f"{service} {method} unavailable in {region} ({hint})"
+                return None, f"{service} {method} not available in {region}"
+            if code == "NoSuchResourceException":
+                return None, f"{service} {method}: Service not available in {region}"
+            if code == "InvalidRegionException":
+                return None, f"{service} not supported in region {region}"
+            
+            return None, f"{code}: {message}"
         except botocore.exceptions.EndpointConnectionError:
             elapsed = time.perf_counter() - start
             profiler = get_active_profiler()
             if profiler:
                 profiler.record_call(service, method, region, elapsed, error=True)
-            return None, "Region not available"
+            return None, f"{service} endpoint not available in {region}"
         except Exception as exc:
             elapsed = time.perf_counter() - start
             profiler = get_active_profiler()

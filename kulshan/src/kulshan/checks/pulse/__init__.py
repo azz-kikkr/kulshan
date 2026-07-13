@@ -92,19 +92,23 @@ def run_scan(session, regions: List[str], *, quick: bool = False, **kwargs) -> d
     from .scanner.alarms import scan_alarms
     from .scanner.tracing import scan_tracing
     from .scoring.engine import calculate_score
+    from kulshan.parallel import parallel_scanners
 
     if quick:
         regions = regions[:3]
 
     scan_results: dict = {}
     all_errors: list[str] = []
-    for name, fn in [("logging", scan_logging), ("alarms", scan_alarms), ("tracing", scan_tracing)]:
-        try:
-            result, errors = fn(session, regions)
-            scan_results[name] = result
-            all_errors.extend(errors)
-        except Exception as e:
-            all_errors.append(f"{name}: {e}")
+
+    # Run all scanners in parallel
+    scanners = {
+        "logging": scan_logging,
+        "alarms": scan_alarms,
+        "tracing": scan_tracing,
+    }
+    
+    scan_results, errors = parallel_scanners(scanners, session, regions)
+    all_errors.extend(errors)
 
     scores = calculate_score(scan_results) if scan_results else {
         "overall_score": 100, "grade": "A+", "total_findings": 0,

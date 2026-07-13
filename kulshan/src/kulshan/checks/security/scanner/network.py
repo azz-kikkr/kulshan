@@ -1,5 +1,8 @@
 """Network exposure scanner, VPC, security groups, public access."""
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
+
 from .base import BaseScanner, ScanResult, Severity
 from ..utils.aws import safe_api_call, parallel_collect
 
@@ -22,40 +25,75 @@ class NetworkScanner(BaseScanner):
         all_subnets = []
         all_igws = []
         all_flow_logs = []
+        all_route_tables = []
+        all_vpc_endpoints = []
+        all_nacls = []
+        all_vpn_connections = []
+        
+        results_lock = threading.Lock()
 
-        for region in self.regions:
+        def scan_region(region: str) -> dict:
+            """Scan all network resources in a single region with batched API calls."""
             ec2 = self.session.client("ec2", region_name=region)
+            region_data = {
+                "sgs": [], "vpcs": [], "subnets": [], "igws": [],
+                "flow_logs": [], "route_tables": [], "vpc_endpoints": [],
+                "nacls": [], "vpn_connections": [], "errors": []
+            }
 
-            sgs, _ = safe_api_call(ec2, "describe_security_groups")
-            for sg in (sgs or {}).get("SecurityGroups", []):
-                sg["_region"] = region
-                all_sgs.append(sg)
+            # Batch all EC2 describe calls for this region
+            api_calls = [
+                ("describe_security_groups", "SecurityGroups", "sgs"),
+                ("describe_vpcs", "Vpcs", "vpcs"),
+                ("describe_subnets", "Subnets", "subnets"),
+                ("describe_internet_gateways", "InternetGateways", "igws"),
+                ("describe_flow_logs", "FlowLogs", "flow_logs"),
+                ("describe_route_tables", "RouteTables", "route_tables"),
+                ("describe_vpc_endpoints", "VpcEndpoints", "vpc_endpoints"),
+                ("describe_network_acls", "NetworkAcls", "nacls"),
+            ]
 
-            vpcs, _ = safe_api_call(ec2, "describe_vpcs")
-            for vpc in (vpcs or {}).get("Vpcs", []):
-                vpc["_region"] = region
-                all_vpcs.append(vpc)
+            for method, key, target in api_calls:
+                resp, err = safe_api_call(ec2, method)
+                if err:
+                    region_data["errors"].append(f"{method} ({region}): {err}")
+                else:
+                    for item in (resp or {}).get(key, []):
+                        item["_region"] = region
+                        region_data[target].append(item)
 
-            subnets, _ = safe_api_call(ec2, "describe_subnets")
-            for sn in (subnets or {}).get("Subnets", []):
-                sn["_region"] = region
-                all_subnets.append(sn)
+            # VPN connections (separate call with filter)
+            try:
+                vpn_resp, _ = safe_api_call(
+                    ec2, "describe_vpn_connections",
+                    Filters=[{"Name": "state", "Values": ["available"]}]
+                )
+                for vpn in (vpn_resp or {}).get("VpnConnections", []):
+                    vpn["_region"] = region
+                    region_data["vpn_connections"].append(vpn)
+            except Exception:
+                pass
 
-            igws, _ = safe_api_call(ec2, "describe_internet_gateways")
-            for igw in (igws or {}).get("InternetGateways", []):
-                igw["_region"] = region
-                all_igws.append(igw)
+            return region_data
 
-            fls, _ = safe_api_call(ec2, "describe_flow_logs")
-            for fl in (fls or {}).get("FlowLogs", []):
-                fl["_region"] = region
-                all_flow_logs.append(fl)
-
-            peerings, _ = safe_api_call(ec2, "describe_vpc_peering_connections")
-            for p in (peerings or {}).get("VpcPeeringConnections", []):
-                p["_region"] = region
-
-            self.advance()
+        # Scan all regions in parallel
+        max_workers = min(len(self.regions), 8)
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {executor.submit(scan_region, r): r for r in self.regions}
+            for future in as_completed(futures):
+                region_data = future.result()
+                with results_lock:
+                    all_sgs.extend(region_data["sgs"])
+                    all_vpcs.extend(region_data["vpcs"])
+                    all_subnets.extend(region_data["subnets"])
+                    all_igws.extend(region_data["igws"])
+                    all_flow_logs.extend(region_data["flow_logs"])
+                    all_route_tables.extend(region_data["route_tables"])
+                    all_vpc_endpoints.extend(region_data["vpc_endpoints"])
+                    all_nacls.extend(region_data["nacls"])
+                    all_vpn_connections.extend(region_data["vpn_connections"])
+                    self.errors.extend(region_data["errors"])
+                self.advance()
 
         self.resources = {
             "security_groups": all_sgs, "vpcs": all_vpcs,
@@ -70,11 +108,11 @@ class NetworkScanner(BaseScanner):
         self._check_flow_logs(all_vpcs, all_flow_logs)
         self._check_public_subnets(all_subnets)
 
-        # Checks merged from awsnet, network hygiene
-        self._check_blackhole_routes()
-        self._check_vpc_endpoints(all_vpcs)
-        self._check_wide_open_nacls()
-        self._check_vpn_tunnels()
+        # Checks using pre-fetched data (no additional API calls needed)
+        self._check_blackhole_routes(all_route_tables)
+        self._check_vpc_endpoints(all_vpcs, all_vpc_endpoints)
+        self._check_wide_open_nacls(all_nacls)
+        self._check_vpn_tunnels(all_vpn_connections)
 
         return ScanResult(findings=self.findings, resources=self.resources, errors=self.errors)
 
@@ -162,21 +200,15 @@ class NetworkScanner(BaseScanner):
                     remediation="Disable auto-assign public IP unless explicitly needed.")
 
 
-    # ── Checks merged from awsnet ─────────────────────────────────────────
+    # ── Checks merged from awsnet (now using pre-fetched data) ────────────
 
-    def _check_blackhole_routes(self):
+    def _check_blackhole_routes(self, route_tables):
         """Detect blackhole routes pointing to deleted resources."""
         blackhole_count = 0
-        for region in self.regions:
-            ec2 = self.session.client("ec2", region_name=region)
-            rt_resp, err = safe_api_call(ec2, "describe_route_tables")
-            if err:
-                self.errors.append(f"Route tables ({region}): {err}")
-                continue
-            for rt in (rt_resp or {}).get("RouteTables", []):
-                for route in rt.get("Routes", []):
-                    if route.get("State") == "blackhole":
-                        blackhole_count += 1
+        for rt in route_tables:
+            for route in rt.get("Routes", []):
+                if route.get("State") == "blackhole":
+                    blackhole_count += 1
         if blackhole_count > 0:
             self.add_finding(
                 check_id="NET-007",
@@ -186,14 +218,9 @@ class NetworkScanner(BaseScanner):
                 description="Routes pointing to deleted resources (NAT GW, peering, etc.).",
                 remediation="Clean up stale routes or recreate the target resources.")
 
-    def _check_vpc_endpoints(self, vpcs):
+    def _check_vpc_endpoints(self, vpcs, vpc_endpoints):
         """Check if VPC endpoints exist for S3/DynamoDB (cost + security)."""
-        total_endpoints = 0
-        for region in self.regions:
-            ec2 = self.session.client("ec2", region_name=region)
-            ep_resp, _ = safe_api_call(ec2, "describe_vpc_endpoints")
-            total_endpoints += len((ep_resp or {}).get("VpcEndpoints", []))
-        if total_endpoints == 0 and len(vpcs) > 0:
+        if len(vpc_endpoints) == 0 and len(vpcs) > 0:
             self.add_finding(
                 check_id="NET-008",
                 title="No VPC endpoints configured",
@@ -202,22 +229,19 @@ class NetworkScanner(BaseScanner):
                 description="All S3/DynamoDB traffic goes via IGW (higher cost, less secure).",
                 remediation="Add gateway endpoints for S3 and DynamoDB in each VPC.")
 
-    def _check_wide_open_nacls(self):
+    def _check_wide_open_nacls(self, nacls):
         """Detect NACLs that allow all inbound traffic from 0.0.0.0/0."""
         wide_open = 0
-        for region in self.regions:
-            ec2 = self.session.client("ec2", region_name=region)
-            nacl_resp, _ = safe_api_call(ec2, "describe_network_acls")
-            for nacl in (nacl_resp or {}).get("NetworkAcls", []):
-                if nacl.get("IsDefault"):
-                    continue
-                for entry in nacl.get("Entries", []):
-                    if (not entry.get("Egress") and entry.get("RuleAction") == "allow"
-                            and entry.get("CidrBlock") == "0.0.0.0/0"
-                            and entry.get("Protocol") == "-1"
-                            and entry.get("RuleNumber", 0) < 32767):
-                        wide_open += 1
-                        break
+        for nacl in nacls:
+            if nacl.get("IsDefault"):
+                continue
+            for entry in nacl.get("Entries", []):
+                if (not entry.get("Egress") and entry.get("RuleAction") == "allow"
+                        and entry.get("CidrBlock") == "0.0.0.0/0"
+                        and entry.get("Protocol") == "-1"
+                        and entry.get("RuleNumber", 0) < 32767):
+                    wide_open += 1
+                    break
         if wide_open > 0:
             self.add_finding(
                 check_id="NET-009",
@@ -227,20 +251,13 @@ class NetworkScanner(BaseScanner):
                 description="Custom NACLs with allow-all inbound bypass security group restrictions.",
                 remediation="Restrict NACL inbound rules to specific ports and CIDR ranges.")
 
-    def _check_vpn_tunnels(self):
+    def _check_vpn_tunnels(self, vpn_connections):
         """Detect VPN tunnels in DOWN state."""
         tunnels_down = 0
-        for region in self.regions:
-            ec2 = self.session.client("ec2", region_name=region)
-            try:
-                vpn_resp, _ = safe_api_call(ec2, "describe_vpn_connections",
-                                             Filters=[{"Name": "state", "Values": ["available"]}])
-                for vpn in (vpn_resp or {}).get("VpnConnections", []):
-                    for tun in vpn.get("VgwTelemetry", []):
-                        if tun.get("Status") == "DOWN":
-                            tunnels_down += 1
-            except Exception:
-                pass
+        for vpn in vpn_connections:
+            for tun in vpn.get("VgwTelemetry", []):
+                if tun.get("Status") == "DOWN":
+                    tunnels_down += 1
         if tunnels_down > 0:
             self.add_finding(
                 check_id="NET-010",

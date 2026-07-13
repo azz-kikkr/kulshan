@@ -6,12 +6,13 @@ import logging
 import concurrent.futures
 import time
 import re
+import threading
 from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
 from rich.console import Console
-from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
+from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn, TaskProgressColumn
 from rich.tree import Tree
 from rich.text import Text
 
@@ -19,8 +20,23 @@ from kulshan.adapter import adapt
 from kulshan.aws_runtime import ApiProfiler, render_perf_summary, set_active_profiler
 from kulshan.models import VALID_EFFORT, VALID_RISK, VALID_SEVERITY
 from kulshan.scoring_utils import grade as _grade
+from kulshan.findings_processor import process_findings
 
 TOOL_ORDER = ["cost", "security", "sweep", "dr", "age", "drift", "tag", "pulse", "limit", "topo"]
+
+# Historical pack timing for ETA estimation (seconds, updated from real runs)
+PACK_TIMING_ESTIMATES = {
+    "cost": 5,
+    "security": 25,  # Parallelized from 63s
+    "sweep": 15,     # Parallelized from 38s
+    "dr": 12,        # Parallelized from 34s
+    "age": 8,        # Parallelized from 20s
+    "drift": 5,
+    "tag": 4,
+    "pulse": 20,     # Parallelized from 58s
+    "limit": 40,     # Optimized from 124s
+    "topo": 6,
+}
 
 TOOL_LABELS = {
     "cost": "Cost Analyzer",
@@ -47,6 +63,10 @@ TOOL_WEIGHTS = {
     "limit": 0.06,
     "topo": 0.08,
 }
+
+# Pack dependencies: packs with no dependencies can run in parallel
+# cost is global (no region dependency), others are regional
+PARALLEL_SAFE_PACKS = {"cost", "security", "sweep", "dr", "age", "drift", "tag", "pulse", "limit", "topo"}
 
 
 # ---------------------------------------------------------------------------
@@ -171,10 +191,21 @@ def run_all_scans(
     profiler = ApiProfiler() if perf else None
     set_active_profiler(profiler)
 
+    # --- Estimate total time for ETA ---
+    # When running in parallel, estimate based on longest pack + overhead
+    if len(packs_to_run) > 1:
+        # Parallel execution: time ≈ max(pack times) + small overhead per pack
+        estimated_total = max(PACK_TIMING_ESTIMATES.get(p, 10) for p in packs_to_run) + len(packs_to_run) * 2
+    else:
+        estimated_total = sum(PACK_TIMING_ESTIMATES.get(p, 10) for p in packs_to_run)
+
     # --- Live severity tally state ---
     severity_tally: Dict[str, int] = {
         "critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0,
     }
+    results_lock = threading.Lock()
+    completed_packs: List[str] = []
+    start_time = time.perf_counter()
 
     def _tally_description() -> str:
         """Build a live severity tally string for the progress bar."""
@@ -191,100 +222,154 @@ def run_all_scans(
             parts.append(f"[dim]●{severity_tally['info']} Info[/dim]")
         return "  ".join(parts) if parts else "[dim]No findings yet[/dim]"
 
+    def _eta_string() -> str:
+        """Calculate and format ETA based on progress."""
+        elapsed = time.perf_counter() - start_time
+        done = len(completed_packs)
+        total = len(packs_to_run)
+        if done == 0:
+            return f"~{estimated_total}s"
+        # Estimate based on actual progress
+        avg_per_pack = elapsed / done
+        remaining = (total - done) * avg_per_pack
+        if remaining < 60:
+            return f"~{int(remaining)}s"
+        return f"~{int(remaining / 60)}m{int(remaining % 60)}s"
+
+    def run_single_pack(tool_key: str) -> Tuple[str, dict]:
+        """Run a single pack and return (tool_key, result)."""
+        pack_start = time.perf_counter()
+        check = _load_check(tool_key)
+        
+        if check is None:
+            result = _skip(tool_key, "Not installed")
+        else:
+            try:
+                result = check.run_scan(
+                    session,
+                    regions,
+                    quick=quick,
+                    profile=profile,
+                    deep=deep,
+                    days=days,
+                )
+            except Exception as e:
+                result = _skip(tool_key, str(e))
+
+        if profiler:
+            profiler.record_pack(tool_key, time.perf_counter() - pack_start)
+
+        # Ensure findings key exists
+        if "findings" not in result:
+            result["findings"] = []
+
+        # Validate findings and exclude invalid ones
+        findings = result.get("findings", [])
+        valid_findings = []
+        invalid_findings = 0
+        for idx, finding in enumerate(findings):
+            if _is_legacy_finding(finding):
+                finding = adapt(tool_key, finding)
+
+            is_valid, reason = validate_finding(finding)
+            if is_valid:
+                valid_findings.append(finding)
+            else:
+                invalid_findings += 1
+                logger.warning("Pack %s finding %d invalid: %s", tool_key, idx, reason)
+
+        result["findings"] = valid_findings
+        if invalid_findings:
+            result.setdefault("errors", []).append(f"Excluded {invalid_findings} invalid finding(s)")
+        _annotate_completeness(result)
+
+        return tool_key, result
+
+    # --- Parallel pack execution ---
+    use_parallel = len(packs_to_run) > 1
+    max_pack_workers = min(len(packs_to_run), 6)  # Cap at 6 concurrent packs
+
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
         BarColumn(),
+        TaskProgressColumn(),
+        TextColumn("ETA: {task.fields[eta]}"),
         TimeElapsedColumn(),
         console=console,
         transient=True,
     ) as progress:
-        overall_task = progress.add_task("Kulshan scan", total=len(packs_to_run))
+        overall_task = progress.add_task(
+            "Kulshan scan",
+            total=len(packs_to_run),
+            eta=_eta_string(),
+        )
 
-        for idx, tool_key in enumerate(packs_to_run, start=1):
-            label = TOOL_LABELS[tool_key]
-            progress.update(
-                overall_task,
-                description=f"[bold]{idx}/{len(packs_to_run)} {label}[/bold]  {_tally_description()}",
-            )
+        if use_parallel:
+            # Run packs in parallel
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_pack_workers) as executor:
+                futures = {executor.submit(run_single_pack, tool_key): tool_key for tool_key in packs_to_run}
+                
+                for future in concurrent.futures.as_completed(futures):
+                    tool_key, result = future.result()
+                    
+                    with results_lock:
+                        results[tool_key] = result
+                        completed_packs.append(tool_key)
+                        
+                        # Update severity tally
+                        for f in result.get("findings", []):
+                            sev = f.get("severity", "info")
+                            if sev in severity_tally:
+                                severity_tally[sev] += 1
 
-            pack_start = time.perf_counter()
-            check = _load_check(tool_key)
-            if check is None:
-                results[tool_key] = _skip(tool_key, "Not installed")
-            else:
-                try:
-                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                        future = executor.submit(
-                            check.run_scan,
-                            session,
-                            regions,
-                            quick=quick,
-                            profile=profile,
-                            deep=deep,
-                            days=days,
-                        )
-                        results[tool_key] = future.result(timeout=300)
-                except concurrent.futures.TimeoutError:
-                    results[tool_key] = _skip(tool_key, "Timed out after 300s")
-                    logger.warning("Pack %s timed out after 300s", tool_key)
-                except Exception as e:
-                    results[tool_key] = _skip(tool_key, str(e))
+                    label = TOOL_LABELS[tool_key]
+                    finding_count = len(result.get("findings", []))
 
-            if profiler:
-                profiler.record_pack(tool_key, time.perf_counter() - pack_start)
+                    # Print completion status
+                    if result.get("skipped"):
+                        progress.console.print(f"  [dim]⊘ {label}[/dim] [dim italic]skipped[/dim italic]")
+                    elif finding_count == 0:
+                        progress.console.print(f"  [green]✓ {label}[/green] [dim]0 findings[/dim]")
+                    else:
+                        progress.console.print(f"  [green]✓ {label}[/green] [yellow]{finding_count} findings[/yellow]")
 
-            # Ensure findings key exists (empty list for packs that don't emit findings)
-            if "findings" not in results[tool_key]:
-                results[tool_key]["findings"] = []
-
-            # Validate findings and exclude invalid ones
-            findings = results[tool_key].get("findings", [])
-            valid_findings = []
-            invalid_findings = 0
-            for idx, finding in enumerate(findings):
-                # Adapt legacy-shaped findings before validation
-                if _is_legacy_finding(finding):
-                    finding = adapt(tool_key, finding)
-
-                is_valid, reason = validate_finding(finding)
-                if is_valid:
-                    valid_findings.append(finding)
-                else:
-                    invalid_findings += 1
-                    logger.warning(
-                        "Pack %s finding %d invalid: %s",
-                        tool_key, idx, reason,
+                    progress.update(
+                        overall_task,
+                        advance=1,
+                        description=f"[bold]{len(completed_packs)}/{len(packs_to_run)} packs[/bold]  {_tally_description()}",
+                        eta=_eta_string(),
                     )
-            results[tool_key]["findings"] = valid_findings
-            if invalid_findings:
-                results[tool_key].setdefault("errors", []).append(
-                    f"Excluded {invalid_findings} invalid finding(s)"
-                )
-            _annotate_completeness(results[tool_key])
-
-            # --- Update live severity tally ---
-            for f in valid_findings:
-                sev = f.get("severity", "info")
-                if sev in severity_tally:
-                    severity_tally[sev] += 1
-
-            # --- Contextual dimming: print completed pack status ---
-            finding_count = len(valid_findings)
-            if results[tool_key].get("skipped"):
-                progress.console.print(
-                    f"  [dim]⊘ {label}[/dim] [dim italic]skipped[/dim italic]"
-                )
-            elif finding_count == 0:
-                progress.console.print(
-                    f"  [green]✓ {label}[/green] [dim]0 findings[/dim]"
-                )
-            else:
-                progress.console.print(
-                    f"  [green]✓ {label}[/green] [yellow]{finding_count} findings[/yellow]"
+        else:
+            # Sequential execution for single pack
+            for idx, tool_key in enumerate(packs_to_run, start=1):
+                label = TOOL_LABELS[tool_key]
+                progress.update(
+                    overall_task,
+                    description=f"[bold]{idx}/{len(packs_to_run)} {label}[/bold]  {_tally_description()}",
+                    eta=_eta_string(),
                 )
 
-            progress.advance(overall_task)
+                tool_key, result = run_single_pack(tool_key)
+                
+                with results_lock:
+                    results[tool_key] = result
+                    completed_packs.append(tool_key)
+                    
+                    for f in result.get("findings", []):
+                        sev = f.get("severity", "info")
+                        if sev in severity_tally:
+                            severity_tally[sev] += 1
+
+                finding_count = len(result.get("findings", []))
+                if result.get("skipped"):
+                    progress.console.print(f"  [dim]⊘ {label}[/dim] [dim italic]skipped[/dim italic]")
+                elif finding_count == 0:
+                    progress.console.print(f"  [green]✓ {label}[/green] [dim]0 findings[/dim]")
+                else:
+                    progress.console.print(f"  [green]✓ {label}[/green] [yellow]{finding_count} findings[/yellow]")
+
+                progress.advance(overall_task)
 
     set_active_profiler(None)
 
@@ -309,6 +394,42 @@ def run_all_scans(
     if profiler:
         render_perf_summary(console, profiler)
 
+    # Post-process findings: deduplicate, add costs, tune severities
+    results = _post_process_findings(results)
+
+    return results
+
+
+def _post_process_findings(results: Dict[str, dict]) -> Dict[str, dict]:
+    """Apply finding post-processing to all pack results."""
+    for tool_key, result in results.items():
+        if result.get("skipped"):
+            continue
+        
+        findings = result.get("findings", [])
+        if not findings:
+            continue
+        
+        # Process findings with deduplication, cost estimation, and severity tuning
+        processed = process_findings(
+            findings,
+            deduplicate=True,
+            add_costs=True,
+            tune_severities=True,
+        )
+        
+        result["findings"] = processed
+        
+        # Update finding count after deduplication
+        result["scores"]["total_findings"] = len(processed)
+        
+        # Recalculate severity counts after processing
+        severity_counts: Dict[str, int] = {}
+        for f in processed:
+            sev = f.get("severity", "info")
+            severity_counts[sev] = severity_counts.get(sev, 0) + f.get("grouped_count", 1)
+        result["scores"]["severity_counts"] = {k: v for k, v in severity_counts.items() if v > 0}
+    
     return results
 
 

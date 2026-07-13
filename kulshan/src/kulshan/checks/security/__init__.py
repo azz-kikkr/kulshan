@@ -197,6 +197,7 @@ def run_scan(session, regions: List[str], *, quick: bool = False, deep: bool = F
     from .scanner.logging_monitor import LoggingScanner
     from .scanner.encryption import EncryptionScanner
     from .scoring.engine import calculate_scores
+    from kulshan.parallel import parallel_map
 
     if quick:
         regions = regions[:3]
@@ -208,15 +209,24 @@ def run_scan(session, regions: List[str], *, quick: bool = False, deep: bool = F
         IAMScanner, NetworkScanner, DataScanner,
         ComputeScanner, LoggingScanner, EncryptionScanner,
     ]
-    for cls in scanner_classes:
+
+    def run_scanner(cls):
+        """Run a single scanner and return (findings, errors)."""
         try:
             scanner = cls(session, regions)
             scanner.deep = deep
             result = scanner.scan()
-            all_findings.extend(result.findings)
-            all_errors.extend(result.errors)
+            return result.findings, result.errors
         except Exception as e:
-            all_errors.append(f"{cls.__name__}: {e}")
+            return [], [f"{cls.__name__}: {e}"]
+
+    # Run all scanners in parallel
+    results, map_errors = parallel_map(run_scanner, scanner_classes, desc="scanner")
+    all_errors.extend(map_errors)
+    
+    for findings, errors in results:
+        all_findings.extend(findings)
+        all_errors.extend(errors)
 
     scores = calculate_scores(all_findings) if all_findings else {
         "overall_score": 100, "overall_grade": "A+",

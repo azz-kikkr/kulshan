@@ -1,6 +1,8 @@
 """Scan service quotas and current usage across key AWS services."""
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Tuple
+import threading
 
 from ..utils.aws import paginate_all, safe_api_call
 
@@ -20,6 +22,12 @@ CRITICAL_QUOTAS = [
     {"service": "s3", "name": "Buckets", "counter": "_count_s3_buckets", "global": True},
 ]
 
+# Services that are known to be unavailable in certain regions
+# These will be skipped with a clean message instead of an error
+REGION_UNAVAILABLE_SERVICES = {
+    "iam": ["ap-northeast-1", "ap-northeast-2", "ap-northeast-3", "eu-west-1", "eu-central-1"],
+}
+
 
 def scan_quotas(session, regions, quick=False, deep=False, progress=None, task_id=None) -> Tuple[List[Dict], List[str]]:
     """Scan service quotas and compute utilization percentages.
@@ -29,7 +37,108 @@ def scan_quotas(session, regions, quick=False, deep=False, progress=None, task_i
     """
     if deep:
         return _scan_quotas_deep(session, regions, quick=quick, progress=progress, task_id=task_id)
-    return _scan_critical_quotas(session, regions, progress=progress, task_id=task_id)
+    return _scan_critical_quotas_parallel(session, regions, progress=progress, task_id=task_id)
+
+
+def _scan_critical_quotas_parallel(session, regions, progress=None, task_id=None) -> Tuple[List[Dict], List[str]]:
+    """Scan critical quotas with parallel region execution and caching."""
+    from kulshan.parallel import get_quota_cache
+    
+    quotas = []
+    errors = []
+    quota_cache = get_quota_cache()
+    results_lock = threading.Lock()
+    
+    # Separate global and regional specs
+    global_specs = [s for s in CRITICAL_QUOTAS if s.get("global")]
+    regional_specs = [s for s in CRITICAL_QUOTAS if not s.get("global")]
+    
+    def scan_region(region: str) -> Tuple[List[Dict], List[str]]:
+        """Scan quotas for a single region."""
+        region_quotas = []
+        region_errors = []
+        sq = session.client("service-quotas", region_name=region)
+        local_cache = {}
+        
+        for spec in regional_specs:
+            svc_code = spec["service"]
+            
+            # Check if service is known to be unavailable in this region
+            if svc_code in REGION_UNAVAILABLE_SERVICES:
+                if region in REGION_UNAVAILABLE_SERVICES[svc_code]:
+                    continue
+            
+            cache_key = f"{region}:{svc_code}"
+            
+            # Try global cache first
+            cached = quota_cache.get(cache_key)
+            if cached is not None:
+                svc_quotas = cached
+            elif cache_key in local_cache:
+                svc_quotas = local_cache[cache_key]
+            else:
+                svc_quotas, q_err = paginate_all(sq, "list_service_quotas", "Quotas", ServiceCode=svc_code)
+                if q_err:
+                    # Check for region-unavailable error
+                    if "not available in the current Region" in str(q_err):
+                        local_cache[cache_key] = []
+                        continue
+                    region_errors.append(f"Service Quotas {svc_code} ({region}): {q_err}")
+                    local_cache[cache_key] = []
+                else:
+                    local_cache[cache_key] = svc_quotas
+                    quota_cache.set(cache_key, svc_quotas)
+                svc_quotas = local_cache.get(cache_key, [])
+            
+            quota = _match_quota(svc_quotas, spec["name"])
+            if not quota:
+                continue
+            
+            current_usage = _count_for_spec(session, region, spec, region_errors)
+            region_quotas.append(_quota_row(svc_code, quota, region, current_usage))
+        
+        return region_quotas, region_errors
+    
+    # Scan global quotas first (only once, in first region)
+    first_region = regions[0] if regions else "us-east-1"
+    sq = session.client("service-quotas", region_name=first_region)
+    
+    for spec in global_specs:
+        svc_code = spec["service"]
+        cache_key = f"global:{svc_code}"
+        
+        cached = quota_cache.get(cache_key)
+        if cached is not None:
+            svc_quotas = cached
+        else:
+            svc_quotas, q_err = paginate_all(sq, "list_service_quotas", "Quotas", ServiceCode=svc_code)
+            if q_err:
+                if "not available in the current Region" not in str(q_err):
+                    errors.append(f"Service Quotas {svc_code} (global): {q_err}")
+                svc_quotas = []
+            quota_cache.set(cache_key, svc_quotas)
+        
+        quota = _match_quota(svc_quotas, spec["name"])
+        if not quota:
+            continue
+        
+        current_usage = _count_for_spec(session, first_region, spec, errors)
+        quotas.append(_quota_row(svc_code, quota, "global", current_usage))
+    
+    # Scan regional quotas in parallel
+    max_workers = min(len(regions), 8)
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(scan_region, r): r for r in regions}
+        for future in as_completed(futures):
+            region_quotas, region_errors = future.result()
+            with results_lock:
+                quotas.extend(region_quotas)
+                errors.extend(region_errors)
+            
+            if progress and task_id:
+                progress.advance(task_id)
+    
+    return quotas, errors
 
 
 def _scan_critical_quotas(session, regions, progress=None, task_id=None) -> Tuple[List[Dict], List[str]]:

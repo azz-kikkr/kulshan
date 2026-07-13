@@ -11,7 +11,7 @@ DESCRIPTION = "Read-only AWS FinOps audit tools. Local-first, no writes, no tele
 
 def run_server() -> None:
     """Run the Kulshan MCP server over stdio."""
-    mcp = FastMCP("kulshan", version="0.2.0", description=DESCRIPTION)
+    mcp = FastMCP("kulshan", instructions=DESCRIPTION)
     register_tools(mcp)
     mcp.run(transport="stdio")
 
