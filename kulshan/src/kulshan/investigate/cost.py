@@ -276,7 +276,7 @@ def _period_totals(
         [previous_period, current_period],
     ).fetchall()
     totals = {previous_period: 0.0, current_period: 0.0}
-    totals.update({row[0]: float(row[1] or 0.0) for row in rows})
+    totals.update({row[0]: float(row[1]) if row[1] is not None else 0.0 for row in rows})
     return totals
 
 
@@ -320,9 +320,9 @@ def _delta_rows(
     return [
         DeltaRow(
             name=str(row[0]) if row[0] else "(blank)",
-            previous_cost=float(row[1] or 0.0),
-            current_cost=float(row[2] or 0.0),
-            delta=float((row[2] or 0.0) - (row[1] or 0.0)),
+            previous_cost=float(row[1]) if row[1] is not None else 0.0,
+            current_cost=float(row[2]) if row[2] is not None else 0.0,
+            delta=float(row[2] if row[2] is not None else 0.0) - float(row[1] if row[1] is not None else 0.0),
         )
         for row in rows
     ]
