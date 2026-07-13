@@ -10,13 +10,32 @@ from kulshan.cur.errors import CurDataError
 from kulshan.cur.schema import CurColumnMapping
 from kulshan.cur.source import local_parquet_source
 from kulshan.investigate.errors import CurInvestigationError
-from kulshan.investigate.models import DeltaRow, Ec2InvestigationBrief, EvidenceItem, TagCoverage
+from kulshan.investigate.models import (
+    ConfidenceAssessment,
+    CostBasis,
+    DeltaRow,
+    Ec2InvestigationBrief,
+    EvidenceItem,
+    InvestigationProvenance,
+    OwnerCandidate,
+    TagCoverage,
+    make_evidence_id,
+)
 
 _MONTH_PATTERN = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 
 
 def investigate_ec2_cur(cur_path: str, month: str | None = None) -> Ec2InvestigationBrief:
-    """Investigate EC2 movement in a local Parquet CUR export."""
+    """Investigate EC2 movement in a local Parquet CUR export.
+    
+    Returns an Ec2InvestigationBrief with full evidence contract including:
+    - Provenance (schema version, kulshan version, timestamps)
+    - Cost basis (which column, currency, accounting treatment)
+    - Confidence assessment (data completeness, ownership confidence)
+    - Owner candidate (if detectable from tags or patterns)
+    
+    Target execution time: < 5 seconds on local Parquet.
+    """
     if month is not None:
         _validate_month(month)
 
@@ -31,6 +50,10 @@ def investigate_ec2_cur(cur_path: str, month: str | None = None) -> Ec2Investiga
         create_ec2_view(con, mapping)
 
         current_period, previous_period = _comparison_periods(con, month)
+        
+        # Get data through date for provenance
+        data_through = _get_data_through(con, mapping)
+        
         totals = _period_totals(con, previous_period, current_period)
         top_accounts = (
             _delta_rows(con, "account_id", previous_period, current_period)
@@ -52,7 +75,50 @@ def investigate_ec2_cur(cur_path: str, month: str | None = None) -> Ec2Investiga
         delta = current_cost - previous_cost
         delta_percent = None if previous_cost == 0 else (delta / previous_cost) * 100
 
+        # Build evidence lists
+        evidence_available = _available_evidence(
+            mapping=mapping,
+            has_tag_columns=bool(tag_columns),
+            previous_period=previous_period,
+            current_period=current_period,
+        )
+        evidence_missing = _missing_evidence(mapping=mapping)
+        
+        # Assess confidence
+        confidence = _assess_confidence(
+            mapping=mapping,
+            tag_coverage=tag_coverage,
+            evidence_available=evidence_available,
+            evidence_missing=evidence_missing,
+        )
+        
+        # Infer owner candidate if possible
+        owner_candidate = _infer_owner_candidate(
+            tag_coverage=tag_coverage,
+            top_accounts=top_accounts,
+            top_resources=top_resources,
+        )
+        
+        # Build cost basis
+        cost_basis = CostBasis(
+            column=mapping.cost,
+            currency="USD",
+            includes_credits=False,
+            includes_refunds=False,
+            includes_taxes=False,
+            amortized="amortized" in mapping.cost.lower(),
+            fallback_note=None,
+        )
+        
+        # Build provenance
+        provenance = InvestigationProvenance(
+            investigation_type="ec2_service_investigation",
+            data_through=data_through,
+        )
+
         return Ec2InvestigationBrief(
+            provenance=provenance,
+            cost_basis=cost_basis,
             service="EC2",
             previous_period=previous_period,
             current_period=current_period,
@@ -65,24 +131,11 @@ def investigate_ec2_cur(cur_path: str, month: str | None = None) -> Ec2Investiga
             top_resources=top_resources,
             top_usage_types=top_usage_types,
             tag_coverage=tag_coverage,
-            evidence_available=_available_evidence(
-                has_resource_id=mapping.resource_id is not None,
-                has_account_id=mapping.account_id is not None,
-                has_region=mapping.region is not None,
-                has_tag_columns=bool(tag_columns),
-                has_owner_tag=mapping.owner_tag is not None,
-                has_team_tag=mapping.team_tag is not None,
-                has_application_tag=mapping.application_tag is not None,
-            ),
-            evidence_missing=_missing_evidence(
-                has_resource_id=mapping.resource_id is not None,
-                has_account_id=mapping.account_id is not None,
-                has_region=mapping.region is not None,
-                has_owner_tag=mapping.owner_tag is not None,
-                has_team_tag=mapping.team_tag is not None,
-                has_application_tag=mapping.application_tag is not None,
-            ),
-            review_questions=_review_questions(top_resources, top_usage_types),
+            evidence_available=evidence_available,
+            evidence_missing=evidence_missing,
+            confidence=confidence,
+            owner_candidate=owner_candidate,
+            review_questions=_review_questions(top_resources, top_usage_types, delta),
         )
     except CurInvestigationError:
         raise
@@ -155,6 +208,20 @@ def _require_period_data(con: Any, previous_period: str, current_period: str) ->
         raise CurInvestigationError(
             f"No EC2 cost data found for previous month {previous_period} in the local CUR export."
         )
+
+
+def _get_data_through(con: Any, mapping: CurColumnMapping) -> str | None:
+    """Get the latest date in the CUR data for provenance."""
+    try:
+        row = con.execute(f"""
+            SELECT MAX(CAST({mapping.usage_start} AS DATE)) AS max_date
+            FROM cur_raw
+        """).fetchone()
+        if row and row[0]:
+            return str(row[0])
+    except Exception:
+        pass
+    return None
 
 
 def _available_tag_columns(mapping: CurColumnMapping) -> list[str]:
@@ -258,109 +325,315 @@ def _delta_rows(
 
 
 def _available_evidence(
-    has_resource_id: bool,
-    has_account_id: bool,
-    has_region: bool,
+    mapping: CurColumnMapping,
     has_tag_columns: bool,
-    has_owner_tag: bool,
-    has_team_tag: bool,
-    has_application_tag: bool,
+    previous_period: str,
+    current_period: str,
 ) -> list[EvidenceItem]:
+    """Build the list of available evidence with proper IDs and sources."""
     evidence = [
-        EvidenceItem("CUR/Data Exports Parquet", "Local billing export was readable."),
         EvidenceItem(
-            "EC2 service delta",
-            "Previous and current EC2 monthly spend were computed.",
+            evidence_id=make_evidence_id("cur_parquet", "ec2"),
+            label="CUR/Data Exports Parquet",
+            detail="Local billing export was readable.",
+            source="cur_parquet",
         ),
-        EvidenceItem("Usage type delta", "Top EC2 usage type contributors were computed."),
+        EvidenceItem(
+            evidence_id=make_evidence_id("ec2_delta", f"{previous_period}-{current_period}"),
+            label="EC2 service delta",
+            detail=f"Compared {previous_period} vs {current_period} EC2 spend.",
+            source="cur_parquet",
+        ),
+        EvidenceItem(
+            evidence_id=make_evidence_id("usage_type_delta"),
+            label="Usage type delta",
+            detail="Top EC2 usage type contributors were computed.",
+            source="cur_parquet",
+        ),
     ]
-    if has_account_id:
-        evidence.append(
-            EvidenceItem("Account delta", "Top EC2 account contributors were computed.")
-        )
-    if has_region:
-        evidence.append(
-            EvidenceItem("Region delta", "Top EC2 region contributors were computed.")
-        )
-    if has_resource_id:
-        evidence.append(
-            EvidenceItem("Resource ID delta", "Top EC2 resource contributors were computed.")
-        )
+    
+    if mapping.account_id is not None:
+        evidence.append(EvidenceItem(
+            evidence_id=make_evidence_id("account_delta"),
+            label="Account delta",
+            detail="Top EC2 account contributors were computed.",
+            source="cur_parquet",
+        ))
+    
+    if mapping.region is not None:
+        evidence.append(EvidenceItem(
+            evidence_id=make_evidence_id("region_delta"),
+            label="Region delta",
+            detail="Top EC2 region contributors were computed.",
+            source="cur_parquet",
+        ))
+    
+    if mapping.resource_id is not None:
+        evidence.append(EvidenceItem(
+            evidence_id=make_evidence_id("resource_delta"),
+            label="Resource ID delta",
+            detail="Top EC2 resource contributors were computed.",
+            source="cur_parquet",
+        ))
+    
     if has_tag_columns:
-        evidence.append(
-            EvidenceItem(
-                "Tag coverage",
-                "Current-period tagged and untagged EC2 spend were computed.",
-            )
-        )
-    if has_owner_tag:
-        evidence.append(
-            EvidenceItem("Owner tag", "Owner tag values were read from the local CUR export.")
-        )
-    if has_team_tag:
-        evidence.append(
-            EvidenceItem("Team tag", "Team tag values were read from the local CUR export.")
-        )
-    if has_application_tag:
-        evidence.append(
-            EvidenceItem(
-                "Application tag",
-                "Application tag values were read from the local CUR export.",
-            )
-        )
+        evidence.append(EvidenceItem(
+            evidence_id=make_evidence_id("tag_coverage"),
+            label="Tag coverage",
+            detail="Current-period tagged and untagged EC2 spend were computed.",
+            source="cur_parquet",
+        ))
+    
+    if mapping.owner_tag is not None:
+        evidence.append(EvidenceItem(
+            evidence_id=make_evidence_id("owner_tag"),
+            label="Owner tag",
+            detail="Owner tag values were read from the local CUR export.",
+            source="cur_parquet",
+        ))
+    
+    if mapping.team_tag is not None:
+        evidence.append(EvidenceItem(
+            evidence_id=make_evidence_id("team_tag"),
+            label="Team tag",
+            detail="Team tag values were read from the local CUR export.",
+            source="cur_parquet",
+        ))
+    
+    if mapping.application_tag is not None:
+        evidence.append(EvidenceItem(
+            evidence_id=make_evidence_id("application_tag"),
+            label="Application tag",
+            detail="Application tag values were read from the local CUR export.",
+            source="cur_parquet",
+        ))
+    
     return evidence
 
 
-def _missing_evidence(
-    has_resource_id: bool,
-    has_account_id: bool,
-    has_region: bool,
-    has_owner_tag: bool,
-    has_team_tag: bool,
-    has_application_tag: bool,
-) -> list[EvidenceItem]:
+def _missing_evidence(mapping: CurColumnMapping) -> list[EvidenceItem]:
+    """Build the list of missing evidence with proper IDs and sources."""
     evidence = []
-    if not has_account_id:
-        evidence.append(
-            EvidenceItem("Account IDs", "Export does not expose account-level contributors.")
-        )
-    if not has_region:
-        evidence.append(
-            EvidenceItem("Regions", "Export does not expose region-level contributors.")
-        )
-    if not has_resource_id:
-        evidence.append(
-            EvidenceItem("Resource IDs", "Export does not expose resource-level contributors.")
-        )
-    if not has_owner_tag:
-        evidence.append(EvidenceItem("Owner tags", "Export does not expose owner tag evidence."))
-    if not has_team_tag:
-        evidence.append(EvidenceItem("Team tags", "Export does not expose team tag evidence."))
-    if not has_application_tag:
-        evidence.append(
-            EvidenceItem("Application tags", "Export does not expose application tag evidence.")
-        )
-    evidence.extend(
-        [
-            EvidenceItem(
-                "Resource inventory",
-                "Live EC2 metadata is not joined to billing evidence yet.",
-            ),
-            EvidenceItem("CloudTrail correlation", "Change events are not correlated yet."),
-            EvidenceItem(
-                "Deployment record",
-                "Ticket, deploy, or release context is not available.",
-            ),
-        ]
-    )
+    
+    if mapping.account_id is None:
+        evidence.append(EvidenceItem(
+            evidence_id=make_evidence_id("missing_account"),
+            label="Account IDs",
+            detail="Export does not expose account-level contributors.",
+            source="cur_parquet",
+        ))
+    
+    if mapping.region is None:
+        evidence.append(EvidenceItem(
+            evidence_id=make_evidence_id("missing_region"),
+            label="Regions",
+            detail="Export does not expose region-level contributors.",
+            source="cur_parquet",
+        ))
+    
+    if mapping.resource_id is None:
+        evidence.append(EvidenceItem(
+            evidence_id=make_evidence_id("missing_resource"),
+            label="Resource IDs",
+            detail="Export does not expose resource-level contributors.",
+            source="cur_parquet",
+        ))
+    
+    if mapping.owner_tag is None:
+        evidence.append(EvidenceItem(
+            evidence_id=make_evidence_id("missing_owner"),
+            label="Owner tags",
+            detail="Export does not expose owner tag evidence.",
+            source="cur_parquet",
+        ))
+    
+    if mapping.team_tag is None:
+        evidence.append(EvidenceItem(
+            evidence_id=make_evidence_id("missing_team"),
+            label="Team tags",
+            detail="Export does not expose team tag evidence.",
+            source="cur_parquet",
+        ))
+    
+    if mapping.application_tag is None:
+        evidence.append(EvidenceItem(
+            evidence_id=make_evidence_id("missing_application"),
+            label="Application tags",
+            detail="Export does not expose application tag evidence.",
+            source="cur_parquet",
+        ))
+    
+    # Always missing (future features)
+    evidence.extend([
+        EvidenceItem(
+            evidence_id=make_evidence_id("missing_inventory"),
+            label="Resource inventory",
+            detail="Live EC2 metadata is not joined to billing evidence yet.",
+            source="ec2_api",
+        ),
+        EvidenceItem(
+            evidence_id=make_evidence_id("missing_cloudtrail"),
+            label="CloudTrail correlation",
+            detail="Change events are not correlated yet.",
+            source="cloudtrail",
+        ),
+        EvidenceItem(
+            evidence_id=make_evidence_id("missing_deployment"),
+            label="Deployment record",
+            detail="Ticket, deploy, or release context is not available.",
+            source="external",
+        ),
+    ])
+    
     return evidence
 
 
-def _review_questions(resources: list[DeltaRow], usage_types: list[DeltaRow]) -> list[str]:
+def _assess_confidence(
+    mapping: CurColumnMapping,
+    tag_coverage: TagCoverage | None,
+    evidence_available: list[EvidenceItem],
+    evidence_missing: list[EvidenceItem],
+) -> ConfidenceAssessment:
+    """Assess confidence based on evidence completeness and ownership data."""
+    # Data completeness: based on what columns are available
+    completeness_score = 0
+    if mapping.account_id is not None:
+        completeness_score += 1
+    if mapping.region is not None:
+        completeness_score += 1
+    if mapping.resource_id is not None:
+        completeness_score += 1
+    if mapping.owner_tag is not None:
+        completeness_score += 1
+    
+    if completeness_score >= 3:
+        data_completeness = "high"
+    elif completeness_score >= 1:
+        data_completeness = "medium"
+    else:
+        data_completeness = "low"
+    
+    # Ownership confidence: based on tag availability and coverage
+    if tag_coverage and tag_coverage.owner_values:
+        if tag_coverage.coverage_percent >= 70:
+            ownership_confidence = "high"
+        elif tag_coverage.coverage_percent >= 30:
+            ownership_confidence = "medium"
+        else:
+            ownership_confidence = "low"
+    elif mapping.owner_tag is not None:
+        ownership_confidence = "low"  # Has column but no values
+    else:
+        ownership_confidence = "low"
+    
+    # Overall label
+    if data_completeness == "high" and ownership_confidence != "low":
+        label = "high"
+    elif data_completeness == "low":
+        label = "low"
+    else:
+        label = "medium"
+    
+    # Build reason
+    reasons = []
+    if data_completeness == "high":
+        reasons.append("CUR data includes account, region, and resource details")
+    elif data_completeness == "medium":
+        reasons.append("CUR data has partial dimension coverage")
+    else:
+        reasons.append("CUR data is missing key dimensions")
+    
+    if ownership_confidence == "high":
+        reasons.append(f"owner tags cover {tag_coverage.coverage_percent:.0f}% of spend")
+    elif ownership_confidence == "medium":
+        reasons.append("owner tags have partial coverage")
+    else:
+        reasons.append("no owner mapping available")
+    
+    return ConfidenceAssessment(
+        label=label,
+        source_agreement="n/a",  # Single source mode (CUR only)
+        data_completeness=data_completeness,
+        ownership_confidence=ownership_confidence,
+        reason="; ".join(reasons),
+    )
+
+
+def _infer_owner_candidate(
+    tag_coverage: TagCoverage | None,
+    top_accounts: list[DeltaRow],
+    top_resources: list[DeltaRow],
+) -> OwnerCandidate | None:
+    """Infer a likely owner candidate from available evidence."""
+    # Priority 1: Owner tag
+    if tag_coverage and tag_coverage.owner_values:
+        return OwnerCandidate(
+            team=tag_coverage.owner_values[0],
+            account_id=top_accounts[0].name if top_accounts else None,
+            basis="tag_value",
+            confirmation_required=True,
+        )
+    
+    # Priority 2: Team tag
+    if tag_coverage and tag_coverage.team_values:
+        return OwnerCandidate(
+            team=tag_coverage.team_values[0],
+            account_id=top_accounts[0].name if top_accounts else None,
+            basis="tag_value",
+            confirmation_required=True,
+        )
+    
+    # Priority 3: Resource naming pattern (e.g., i-prod-*, i-dev-*)
+    if top_resources:
+        top_resource = top_resources[0].name
+        if top_resource.startswith("i-prod") or "prod" in top_resource.lower():
+            return OwnerCandidate(
+                team="Production (inferred from naming)",
+                account_id=top_accounts[0].name if top_accounts else None,
+                basis="resource_naming_pattern",
+                confirmation_required=True,
+            )
+        elif top_resource.startswith("i-dev") or "dev" in top_resource.lower():
+            return OwnerCandidate(
+                team="Development (inferred from naming)",
+                account_id=top_accounts[0].name if top_accounts else None,
+                basis="resource_naming_pattern",
+                confirmation_required=True,
+            )
+    
+    # Priority 4: Account-only inference
+    if top_accounts:
+        return OwnerCandidate(
+            team=None,
+            account_id=top_accounts[0].name,
+            basis="inferred",
+            confirmation_required=True,
+        )
+    
+    return None
+
+
+def _review_questions(
+    resources: list[DeltaRow],
+    usage_types: list[DeltaRow],
+    delta: float,
+) -> list[str]:
+    """Generate contextual review questions."""
     resource = resources[0].name if resources else "the top EC2 resource"
     usage_type = usage_types[0].name if usage_types else "the top EC2 usage type"
-    return [
+    
+    questions = [
         f"What changed for {resource} during the current period?",
         f"Was the increase in {usage_type} expected or tied to a planned workload change?",
-        "Should this EC2 spend be tagged, reallocated, or reviewed before the finance meeting?",
     ]
+    
+    if delta > 0:
+        questions.append(
+            "Should this EC2 spend be tagged, reallocated, or reviewed before the finance meeting?"
+        )
+    else:
+        questions.append(
+            "Was the cost decrease due to optimization, workload reduction, or resource termination?"
+        )
+    
+    return questions

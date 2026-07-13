@@ -43,14 +43,20 @@ kulshan investigate ec2 --cur <local-parquet-file-or-dir>
 kulshan investigate ec2 --cur <local-parquet-file-or-dir> --month YYYY-MM
 ```
 
-The current EC2 brief reads local Parquet only and reports previous/current cost, delta, account contributors, region contributors, resource contributors, usage type contributors, tag/owner evidence, missing evidence, and review questions. It accepts a local `.parquet` file or a local directory containing `.parquet` files.
+The current EC2 brief reads local Parquet only and reports previous/current cost, delta, account contributors, region contributors, resource contributors, usage type contributors, tag/owner evidence, missing evidence, and review questions. It accepts a local `.parquet` file or a local directory containing `.parquet` files. EC2 investigation is one pack, not the validation gate.
+
+Current S3-related support:
+
+- `kulshan cur s3-check --s3 s3://bucket/prefix/` checks readiness by listing a prefix and reading object metadata. It downloads nothing and runs no analysis.
+- `kulshan investigate cost --s3 s3://bucket/prefix/ --month YYYY-MM` is an experimental S3-native investigation path that reads the manifest and queries CUR/Data Export Parquet through DuckDB `httpfs`.
+- No full CUR download by default.
+- No Athena workgroup required, no Glue catalog dependency, and no Athena scanned-data billing for the default evidence workflow. Standard S3 request and transfer charges may still apply.
 
 Not implemented yet:
 
-- S3 `s3://` CUR reads.
 - AWS Data Export discovery.
-- S3 bucket or prefix listing to find CUR Parquet files.
 - Athena queries or Glue Catalog integration.
+- `s3://` support for `kulshan investigate ec2`; EC2 investigation still uses local files.
 - `kulshan cur top-services`.
 - JSON or Markdown investigation output.
 - SQLite source manifests or investigation run state.
@@ -72,7 +78,7 @@ kulshan cur validate --path ./cur/
 kulshan investigate ec2 --cur ./cur/ --month YYYY-MM
 ```
 
-Current local-only mode requires no AWS IAM permissions for the investigation command. S3 sync and future S3/Athena modes would require separate AWS permissions and are not implemented yet.
+Current local-only mode requires no AWS IAM permissions for the investigation command. The experimental S3-native investigation path requires read-only S3 access to the customer billing export prefix and may require KMS decrypt permission when the objects use a customer-managed KMS key. Data Export discovery, Athena, and Glue workflows are not implemented.
 ## Required modules
 
 Proposed CLI repository structure:
@@ -109,9 +115,9 @@ kulshan/
 
 Responsibilities:
 
-- `cur/source.py`: resolve local paths into DuckDB-readable Parquet globs. Future/not implemented yet: resolve S3 paths.
-- `cur/duckdb_engine.py`: create DuckDB connection and register the local CUR relation. Future/not implemented yet: install/load `httpfs` when S3 is used.
-- `cur/validate.py`: verify readable Parquet files and required billing columns.
+- `cur/source.py`: resolve local paths into DuckDB-readable Parquet globs. EC2 investigation still uses this local path resolver.
+- `cur/duckdb_engine.py`: create DuckDB connection and register the local CUR relation. `cur/s3_query.py` separately loads DuckDB `httpfs` for the experimental S3-native cost investigation path.
+- `cur/validation.py`: verify generic CUR/Data Export readability, required billing columns, selected cost column, and pack readiness. Validation should not fail just because EC2 rows are absent.
 - `cur/schema.py`: print detected columns and map them to normalized names.
 - `cur/normalize.py`: create a normalized CUR view with stable column names.
 - `investigate/ec2.py`: orchestrate EC2-specific query flow.
@@ -127,6 +133,12 @@ Implemented commands:
 kulshan cur validate --path <local-parquet-file-or-dir>
 kulshan cur schema --path <local-parquet-file-or-dir>
 kulshan investigate ec2 --cur <local-parquet-file-or-dir> --month YYYY-MM
+```
+
+Experimental S3-native cost investigation:
+
+```bash
+kulshan investigate cost --s3 s3://billing-bucket/prefix/ --month YYYY-MM
 ```
 
 Future / not implemented yet:
@@ -208,7 +220,7 @@ Use the user's local cache directory, with a configurable override later.
 
 For the MVP, cache can be optional. The first implementation may query files directly and only write SQLite state for manifests and runs.
 
-Do not upload data. Do not write to S3. Do not create Athena or Glue resources.
+Do not upload data. Do not write to S3. Do not create Athena or Glue resources. The experimental S3-native cost investigation path queries Parquet through DuckDB `httpfs`; it does not download the full CUR by default.
 
 ## SQLite schema
 
@@ -309,9 +321,9 @@ Questions for Meeting:
 
 1. Add DuckDB dependency and a tiny connection wrapper.
 2. Implement local Parquet path resolution.
-3. Future/not implemented yet: implement S3 path support through DuckDB `httpfs`.
+3. Implement experimental S3-native cost investigation through DuckDB `httpfs`.
 4. Add `kulshan cur schema --path`.
-5. Add `kulshan cur validate --path`.
+5. Add `kulshan cur validate --path` for generic CUR readability; EC2 rows are informational, not a validation gate.
 6. Create normalized CUR view with stable column aliases.
 7. Add `kulshan cur top-services --path --month`.
 8. Add EC2 SQL views for service/account/region/usage/resource deltas.

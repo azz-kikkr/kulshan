@@ -69,6 +69,21 @@ Requires: Python 3.9+ and AWS credentials.
 
 ---
 
+## Quick Commands
+
+```bash
+kulshan --version                       # Show version
+kulshan doctor                          # Verify credentials and permissions
+kulshan report                          # Default FinOps baseline (cost pack)
+kulshan report --quick                  # Fast scan (skips confirmation)
+kulshan report -o report.html           # Save as HTML
+kulshan report --packs all --regions us-east-1  # Full 10-pack diagnostic
+kulshan history                         # View past scans
+kulshan shell                           # Interactive REPL
+```
+
+---
+
 ## AWS Credentials
 
 Kulshan uses the same credential chain as the AWS CLI. If `aws sts get-caller-identity` works, Kulshan works.
@@ -152,69 +167,93 @@ kulshan report --packs all --regions us-east-1
 
 ---
 
-## S3 Readiness Check, Not S3 Analysis
+## CUR/Data Export Investigations
 
-Kulshan can check whether your AWS identity can see a CUR/Data Export layout in S3 before you copy files locally:
+Kulshan can investigate cost movements directly from CUR/Data Export Parquet files, both locally and from S3. No Athena, no Glue, no data warehouse required.
 
-```bash
-kulshan cur s3-check --s3 s3://bucket/prefix/
-```
-
-This command only lists up to 50 S3 objects and reads object metadata for one manifest and one Parquet file when found. It does not download CUR data, query Athena, use Glue, discover Data Exports, or run analysis. Local investigation still requires local Parquet files:
+### Local Investigation (Recommended)
 
 ```bash
+# Validate CUR Parquet structure
 kulshan cur validate --path ./cur/
-kulshan investigate ec2 --cur ./cur/ --month YYYY-MM
+
+# Inspect schema mapping
+kulshan cur schema --path ./cur/
+
+# Investigate cost top-movers across all services
+kulshan investigate cost --path ./cur/ --month 2024-06
+
+# Investigate EC2-specific movements
+kulshan investigate ec2 --cur ./cur/ --month 2024-06
+
+# Export as JSON (for AI agents) or Markdown
+kulshan investigate cost --path ./cur/ --month 2024-06 -o report.json
+kulshan investigate ec2 --cur ./cur/ --month 2024-06 -o report.md
 ```
 
-See `docs/iam-setup.md` for the optional read-only S3 policy.
-## Experimental Local CUR/Data Export Investigations
-
-Kulshan has an experimental local-only EC2 investigation path for customer-owned CUR/Data Export Parquet files. It is intended to reduce MTTE: Mean Time To Explanation.
-
-Current support:
-
-- Local `.parquet` file or local directory containing `.parquet` files.
-- Terminal EC2 investigation brief.
-- No AWS API calls from the investigation command.
-- No `s3://` path support for analysis, AWS Data Export discovery, Glue, or Athena query support.
-
-Local-only onboarding:
-
-1. Export, download, or sync CUR/Data Export Parquet files to a local directory such as `./cur/`.
-2. Validate the local files:
-   ```bash
-   kulshan cur validate --path ./cur/
-   ```
-3. Investigate EC2 movement for a billing month:
-   ```bash
-   kulshan investigate ec2 --cur ./cur/ --month YYYY-MM
-   ```
-
-Optional schema inspection:
+### S3-Native Investigation
 
 ```bash
-kulshan cur schema --path ./cur/
+# Check S3 readiness (no data download)
+kulshan cur s3-check --s3 s3://bucket/prefix/
+
+# Investigate from S3 via DuckDB httpfs
+kulshan investigate cost --s3 s3://bucket/prefix/ --month 2024-06
 ```
 
-IAM note:
+### Evidence Contract
 
-Current local-only mode requires no AWS IAM permissions for the investigation command. S3 sync and future Athena/S3 discovery modes would require separate AWS permissions and are not implemented yet.
+All investigation outputs include a full evidence contract for AI agent trust:
 
-The EC2 investigation brief currently includes:
+```json
+{
+  "schema_version": "1.0",
+  "kulshan_version": "0.2.2",
+  "investigation_type": "cost_top_movers",
+  "generated_at": "2024-06-15T10:30:00Z",
+  "data_through": "2024-06-14",
+  "human_review_required": true,
+  "confidence": {
+    "label": "medium",
+    "data_completeness": "high",
+    "ownership_confidence": "low",
+    "reason": "CUR data includes service, account, region details; no owner mapping"
+  },
+  "top_services": [...],
+  "evidence": {
+    "available": [...],
+    "missing": [...]
+  }
+}
+```
 
-- Previous and current month EC2 cost
-- Absolute and percentage delta
-- Account contributors when account columns exist
-- Region contributors when region/location columns exist
-- Resource contributors when resource IDs exist
-- Usage type contributors
-- Tag and owner evidence from CUR tag columns
-- Missing evidence when fields are absent
-- Review questions for the finance/platform meeting
+Key guarantees:
+- `human_review_required: true` — always
+- Structured confidence (not a numeric score)
+- Evidence items with unique IDs for traceability
+- Full provenance on every output
 
-This is an early CUR MVP: local Parquet only, no S3 path support yet, and terminal output only. It is not a replacement for full CUR/Athena dashboards.
+### What Investigations Include
 
+**Cost Investigation (`investigate cost`):**
+- Top movers by service, account, region, usage type
+- Period-over-period delta with percentages
+- Suggested deep dives (e.g., "run investigate ec2" if EC2 is top mover)
+- Review questions for finance meetings
+
+**EC2 Investigation (`investigate ec2`):**
+- Instance family, region, pricing model breakdowns
+- Resource-level contributors
+- Tag coverage analysis (owner, team, application tags)
+- Owner candidate inference with confirmation required
+
+### Local-Only Onboarding
+
+1. Download CUR Parquet files to `./cur/`
+2. Validate: `kulshan cur validate --path ./cur/`
+3. Investigate: `kulshan investigate cost --path ./cur/ --month YYYY-MM`
+
+No AWS API calls required for local investigation.
 ---
 
 ## Output Formats
