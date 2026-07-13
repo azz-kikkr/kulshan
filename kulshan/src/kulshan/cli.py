@@ -250,12 +250,52 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
 
     session = create_session(profile=profile, role_arn=role_arn)
 
-    # Pre-flight health check
-    from kulshan.preflight import run_preflight
-    passed, _warnings = run_preflight(session, console=console)
-    if not passed:
+    # Pre-flight health check (with CUR discovery)
+    from kulshan.preflight import run_preflight_with_cur
+    preflight_result = run_preflight_with_cur(session, console=console)
+    if not preflight_result.passed:
         console.print("[red]Pre-flight checks failed. Fix the issues above and retry.[/red]")
         sys.exit(ExitCode.CONFIG_ERROR)
+
+    # ── CUR/Data Export offer ────────────────────────────────────────────
+    # If CUR is available and cost pack is selected, offer to use it
+    use_cur = None  # None = no CUR, "additive" = CE + CUR, "only" = CUR only
+    cur_s3_uri = None
+    has_cost_pack = "cost" in selected_packs
+    if (
+        preflight_result.cur_export
+        and preflight_result.cur_accessible
+        and has_cost_pack
+        and not yes
+        and not quick
+    ):
+        console.print()
+        console.print(
+            f"  [cyan bold]⬢ CUR/Data Export available[/cyan bold]"
+        )
+        console.print(
+            f"    [dim]CUR provides richer line-item detail for cost analysis.[/dim]"
+        )
+        console.print()
+        console.print("    [bold]1.[/bold] Cost Explorer only (default)")
+        console.print("    [bold]2.[/bold] Cost Explorer + CUR (adds top-mover detail)")
+        console.print("    [bold]3.[/bold] CUR only (skips CE API, saves ~$0.15)")
+        console.print()
+        choice = click.prompt(
+            "  Select mode",
+            type=click.Choice(["1", "2", "3"]),
+            default="1",
+            show_choices=False,
+        )
+        if choice == "2":
+            use_cur = "additive"
+            cur_s3_uri = preflight_result.cur_export.s3_uri
+            console.print(f"    [green]→ CE + CUR mode[/green]")
+        elif choice == "3":
+            use_cur = "only"
+            cur_s3_uri = preflight_result.cur_export.s3_uri
+            console.print(f"    [green]→ CUR only mode (no CE API calls)[/green]")
+        console.print()
 
     account_id = get_account_id(session)
 
@@ -286,7 +326,11 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
 
     # ── API cost notice ──────────────────────────────────────────────────
     has_cost_pack = "cost" in selected_packs
-    if not yes and not quick and has_cost_pack:
+    if use_cur == "only":
+        # CUR-only mode skips CE entirely
+        console.print("  [green]AWS API cost: ~$0.00[/green] [dim](CUR only — no CE API calls)[/dim]")
+        console.print()
+    elif not yes and not quick and has_cost_pack:
         est_cost = "$0.15-0.25"
         console.print(
             f"  [red bold]⚠ AWS Cost:[/red bold] "
@@ -311,32 +355,153 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
 
     # Pack selection already resolved above
 
-    start = time.time()
-    results = run_all_scans(
-        session=session, regions=regions, profile=profile, quick=quick, console=console,
-        selected_packs=selected_packs, perf=perf, deep=deep, days=days,
-    )
-    duration = time.time() - start
-
-    from kulshan.orchestrator import summarize_completeness
-
-    scan_metadata = summarize_completeness(results)
-    overall_score, overall_grade = compute_overall(results)
-    if scan_metadata["partial"]:
-        console.print(
-            "[yellow bold]Partial scan:[/yellow bold] overall score withheld because "
-            "one or more requested checks were skipped or reported errors."
+    # ── CUR-only mode: skip CE, run CUR investigation directly ───────────
+    if use_cur == "only":
+        from kulshan.cur.s3_query import connect_s3_duckdb, investigate_cost_s3
+        from kulshan.cur.manifest_reader import read_manifest_uri
+        from datetime import date
+        
+        console.print("  [cyan]Running CUR-only cost analysis...[/cyan]")
+        start = time.time()
+        
+        try:
+            # Determine current month for investigation
+            current_month = date.today().strftime("%Y-%m")
+            
+            # Connect to S3 and read manifest
+            con = connect_s3_duckdb()
+            manifest = read_manifest_uri(cur_s3_uri, billing_period=current_month)
+            
+            # Run CUR investigation from S3
+            brief = investigate_cost_s3(con, manifest, current_month)
+            con.close()
+            duration = time.time() - start
+            
+            # Convert CUR brief to report-compatible format
+            results = {
+                "cost": {
+                    "tool": "cost",
+                    "mode": "cur_only",
+                    "scores": {
+                        "overall_score": 50,  # Neutral score for CUR-only
+                        "grade": "N/A",
+                        "total_findings": 0,
+                        "severity_counts": {},
+                        "total_spend": brief.total_spend,
+                    },
+                    "findings": [],
+                    "errors": [],
+                    "metadata": {
+                        "cur_investigation": {
+                            "month": current_month,
+                            "total_spend": brief.total_spend,
+                            "cost_column": brief.cost_column,
+                            "fallback_note": brief.fallback_note,
+                            "top_services": list(brief.top_services[:5]),
+                            "top_accounts": list(brief.top_accounts[:5]),
+                            "top_regions": list(brief.top_regions[:5]),
+                            "top_usage_types": list(brief.top_usage_types[:5]),
+                            "data_source": cur_s3_uri,
+                            "scan_estimate_bytes": brief.estimate.estimated_bytes,
+                        },
+                    },
+                }
+            }
+            
+            console.print(f"  [green]✓[/green] CUR analysis complete ({duration:.1f}s)")
+            console.print()
+            console.print(f"    Month: {current_month}")
+            console.print(f"    Total spend: ${brief.total_spend:,.2f}")
+            console.print()
+            
+            if brief.top_services:
+                console.print("    [bold]Top Services:[/bold]")
+                for name, cost in brief.top_services[:5]:
+                    console.print(f"      {name}: ${cost:,.2f}")
+                console.print()
+                
+        except Exception as e:
+            duration = time.time() - start
+            console.print(f"  [red]✗[/red] CUR analysis failed: {e}")
+            results = {
+                "cost": {
+                    "tool": "cost",
+                    "mode": "cur_only",
+                    "scores": {"overall_score": 0, "grade": "N/A", "total_findings": 0},
+                    "findings": [],
+                    "errors": [str(e)],
+                    "skipped": True,
+                }
+            }
+        
+        # Skip the rest of normal report flow for CUR-only mode
+        scan_metadata = {"partial": False, "skipped": [], "errors": []}
+        overall_score, overall_grade = 50, "N/A"
+        all_findings = []
+        top_actions = []
+        
+    else:
+        # ── Normal mode: run CE-based scans ──────────────────────────────
+        start = time.time()
+        results = run_all_scans(
+            session=session, regions=regions, profile=profile, quick=quick, console=console,
+            selected_packs=selected_packs, perf=perf, deep=deep, days=days,
         )
+        duration = time.time() - start
 
-    # Phase 6C-1: top-level ranked findings + actions for buyer-grade output.
-    from kulshan.findings_ranker import flatten_findings, top_n
+        from kulshan.orchestrator import summarize_completeness
 
-    all_findings = flatten_findings(results)
-    top_actions = top_n(all_findings, n=10)
+        scan_metadata = summarize_completeness(results)
+        overall_score, overall_grade = compute_overall(results)
+        if scan_metadata["partial"]:
+            console.print(
+                "[yellow bold]Partial scan:[/yellow bold] overall score withheld because "
+                "one or more requested checks were skipped or reported errors."
+            )
 
-    # Enrich findings with remediation snippets
-    from kulshan.remediation import enrich_findings
-    enrich_findings(all_findings)
+        # Phase 6C-1: top-level ranked findings + actions for buyer-grade output.
+        from kulshan.findings_ranker import flatten_findings, top_n
+
+        all_findings = flatten_findings(results)
+        top_actions = top_n(all_findings, n=10)
+
+        # Enrich findings with remediation snippets
+        from kulshan.remediation import enrich_findings
+        enrich_findings(all_findings)
+        
+        # ── Additive CUR mode: also run CUR investigation ────────────────
+        if use_cur == "additive" and cur_s3_uri:
+            try:
+                from kulshan.cur.s3_query import connect_s3_duckdb, investigate_cost_s3
+                from kulshan.cur.manifest_reader import read_manifest_uri
+                from datetime import date
+                
+                console.print()
+                console.print("  [cyan]Running supplementary CUR analysis...[/cyan]")
+                
+                current_month = date.today().strftime("%Y-%m")
+                con = connect_s3_duckdb()
+                manifest = read_manifest_uri(cur_s3_uri, billing_period=current_month)
+                brief = investigate_cost_s3(con, manifest, current_month)
+                con.close()
+                
+                # Add CUR data to cost pack metadata
+                if "cost" in results:
+                    results["cost"]["metadata"]["cur_investigation"] = {
+                        "month": current_month,
+                        "total_spend": brief.total_spend,
+                        "cost_column": brief.cost_column,
+                        "fallback_note": brief.fallback_note,
+                        "top_services": list(brief.top_services[:5]),
+                        "top_accounts": list(brief.top_accounts[:5]),
+                        "top_regions": list(brief.top_regions[:5]),
+                        "data_source": cur_s3_uri,
+                    }
+                
+                console.print(f"  [green]✓[/green] CUR enrichment added")
+            except Exception as e:
+                console.print(f"  [yellow]⚠[/yellow] CUR enrichment failed: {e}")
+                # Non-fatal — CE results still valid
 
     if not no_history:
         try:

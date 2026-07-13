@@ -2,9 +2,20 @@
 from __future__ import annotations
 
 import sys
-from typing import Any, List, Tuple
+from dataclasses import dataclass
+from typing import Any, List, Optional, Tuple
 
 from rich.console import Console
+
+
+@dataclass
+class PreflightResult:
+    """Result of pre-flight checks including optional CUR discovery."""
+    
+    passed: bool
+    warnings: List[str]
+    cur_export: Optional[Any] = None  # CurExportInfo if discovered
+    cur_accessible: bool = False
 
 
 def run_preflight(
@@ -141,3 +152,56 @@ def run_preflight(
 
     console.print()
     return all_passed, warnings
+
+
+def run_preflight_with_cur(
+    session: Any,
+    console: Console | None = None,
+    verbose: bool = False,
+) -> PreflightResult:
+    """Run pre-flight checks including CUR/Data Export discovery.
+    
+    Returns a PreflightResult with:
+    - passed: whether critical checks passed
+    - warnings: list of warning messages  
+    - cur_export: CurExportInfo if a Data Export was discovered
+    - cur_accessible: whether we can access the CUR S3 location
+    """
+    # Run standard preflight first
+    passed, warnings = run_preflight(session, console, verbose)
+    
+    result = PreflightResult(
+        passed=passed,
+        warnings=warnings,
+        cur_export=None,
+        cur_accessible=False,
+    )
+    
+    # Skip CUR discovery if auth failed
+    if not passed:
+        return result
+    
+    if console is None:
+        console = Console()
+    
+    # 7. CUR/Data Export discovery (best-effort, non-blocking)
+    try:
+        from kulshan.cur.discovery import find_best_cur_export, check_cur_s3_access
+        
+        export = find_best_cur_export(session)
+        if export:
+            # Check if we can actually access the S3 data
+            accessible = check_cur_s3_access(session, export)
+            result.cur_export = export
+            result.cur_accessible = accessible
+            
+            if accessible:
+                console.print(f"  [cyan]⬢[/cyan] CUR/Data Export found: [bold]{export.export_name}[/bold]")
+                console.print(f"    [dim]{export.s3_uri}[/dim]")
+            else:
+                console.print(f"  [dim]  ─[/dim] [dim]CUR found but S3 not accessible: {export.export_name}[/dim]")
+    except Exception:
+        # CUR discovery is best-effort — never block on errors
+        pass
+    
+    return result
