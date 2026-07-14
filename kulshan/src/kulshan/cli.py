@@ -989,7 +989,9 @@ def investigate() -> None:
     default=None,
     help="Write investigation output to .json or .md.",
 )
+@click.pass_context
 def investigate_cost(
+    ctx: click.Context,
     s3_uri: str | None,
     cur_path: str | None,
     month: str,
@@ -1056,7 +1058,7 @@ def investigate_cost(
         from kulshan.redact import redact_account_id
 
         try:
-            ws_ctx = _resolve_ws(None)  # resolve active workspace (no AWS)
+            ws_ctx = _resolve_ws(ctx.obj.get("workspace"))  # resolve workspace (no AWS)
         except WorkspaceError:
             ws_ctx = None
 
@@ -1217,7 +1219,8 @@ def _print_cost_table(console, title: str, rows: tuple[tuple[str, float], ...]) 
     default=None,
     help="Write investigation output to .json or .md.",
 )
-def investigate_ec2(cur_path: str, month: str | None, output: str | None) -> None:
+@click.pass_context
+def investigate_ec2(ctx: click.Context, cur_path: str, month: str | None, output: str | None) -> None:
     """Produce a local EC2 investigation brief from Parquet CUR data."""
     from rich.console import Console as RichConsole
     from rich.table import Table
@@ -1251,7 +1254,7 @@ def investigate_ec2(cur_path: str, month: str | None, output: str | None) -> Non
     from kulshan.redact import redact_account_id
 
     try:
-        ws_ctx = _resolve_ws(None)
+        ws_ctx = _resolve_ws(ctx.obj.get("workspace"))
     except WorkspaceError:
         ws_ctx = None
 
