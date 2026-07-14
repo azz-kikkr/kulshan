@@ -259,6 +259,104 @@ def resolve_workspace(
     return WorkspaceContext.from_path(workspace_path, config)
 
 
+def resolve_workspace_with_profile(
+    workspace_name: str | None = None,
+    profile: str | None = None,
+    role_arn: str | None = None,
+) -> WorkspaceContext | None:
+    """Resolve workspace considering profile-based registry lookup.
+
+    This extends the base resolve_workspace() with automatic routing.
+    When a profile is supplied it ALWAYS takes priority over the active
+    workspace — an unknown profile must never be routed into an existing
+    workspace that belongs to a different identity.
+
+    Resolution order:
+    1. Explicit --workspace parameter → use that workspace directly.
+    2. KULSHAN_WORKSPACE env var → use that workspace directly.
+    3. Profile supplied (--profile or AWS_PROFILE):
+       a. Exact registry match by profile + role_arn → use that workspace.
+       b. No match → return None (signals auto-create).
+    4. No profile supplied → active workspace from config.toml.
+    5. No profile supplied → single configured workspace (if exactly one).
+    6. Return None → signals auto-onboarding or unbound default fallback.
+
+    Args:
+        workspace_name: Explicit workspace name from --workspace.
+        profile: AWS profile name (from --profile or AWS_PROFILE).
+        role_arn: Optional role ARN from --role-arn.
+
+    Returns:
+        WorkspaceContext if an existing workspace was found, or None
+        to signal that onboarding should be attempted (when profile
+        is supplied) or that the unbound default should be used (when
+        no profile is supplied).
+    """
+    # 1. Explicit workspace name — always honored
+    if workspace_name:
+        return resolve_workspace(workspace_name)
+
+    # 2. KULSHAN_WORKSPACE env var — always honored
+    env_ws = os.environ.get("KULSHAN_WORKSPACE")
+    if env_ws:
+        return resolve_workspace(env_ws)
+
+    # Ensure infrastructure is ready (default workspace, migration)
+    ensure_workspace_infrastructure()
+
+    # Determine effective profile
+    effective_profile = profile or os.environ.get("AWS_PROFILE")
+
+    # 3. Profile supplied → profile-based routing (takes priority over active)
+    if effective_profile:
+        from kulshan.workspace.registry import list_registry_entries
+
+        entries = list_registry_entries()
+        # Match by profile AND role_arn. When role_arn is None from CLI,
+        # match only entries that also have no role_arn. This ensures
+        # same profile with different roles stays separate.
+        profile_matches = [
+            e for e in entries
+            if e.profile == effective_profile and e.role_arn == role_arn
+        ]
+
+        if len(profile_matches) == 1:
+            entry = profile_matches[0]
+            ws_path = get_workspace_path(entry.workspace_dir)
+            if ws_path.exists() and (ws_path / "workspace.toml").exists():
+                config = read_workspace_config(ws_path)
+                return WorkspaceContext.from_path(ws_path, config)
+
+        # Profile supplied but no registry match → signal auto-create.
+        # Never fall through to active workspace or single-workspace
+        # when a profile is explicitly provided.
+        return None
+
+    # --- No profile supplied: fallback chain ---
+
+    # 4. Active workspace
+    active = get_active_workspace_name()
+    if active and active != "default":
+        try:
+            return resolve_workspace(active)
+        except (WorkspaceNotFoundError, WorkspaceConfigError):
+            logger.warning("Active workspace '%s' not found, ignoring.", active)
+
+    # 5. Single configured workspace
+    from kulshan.workspace.registry import list_registry_entries
+
+    entries = list_registry_entries()
+    if len(entries) == 1:
+        entry = entries[0]
+        ws_path = get_workspace_path(entry.workspace_dir)
+        if ws_path.exists() and (ws_path / "workspace.toml").exists():
+            config = read_workspace_config(ws_path)
+            return WorkspaceContext.from_path(ws_path, config)
+
+    # 6. No match — signal that caller should use unbound default
+    return None
+
+
 def _reset_migration_guard() -> None:
     """Reset the once-per-process migration guard. For testing only."""
     global _migration_attempted

@@ -598,3 +598,95 @@ def workspace_default_connection(workspace_name: str, connection_name: str) -> N
         f"set to [cyan]{connection_name}[/cyan]."
     )
     console.print()
+
+
+# ---------------------------------------------------------------------------
+# workspace rename
+# ---------------------------------------------------------------------------
+
+
+@workspace.command("rename")
+@click.argument("name")
+@click.argument("new_display_name")
+def workspace_rename(name: str, new_display_name: str) -> None:
+    """Rename a workspace's display name.
+
+    Changes only the display name. The internal ID and database path
+    remain stable.
+
+    \b
+    Example:
+      kulshan workspace rename ws_7f3a842c "Acme Corporation"
+      kulshan workspace rename acme-finops-cedar "Acme Corporation"
+    """
+    from kulshan.workspace.registry import find_entry_by_workspace_dir, update_display_name
+
+    console = Console()
+
+    # Validate workspace name
+    try:
+        validate_workspace_name(name, allow_default=True)
+    except WorkspaceValidationError as e:
+        console.print(f"[red]{e}[/red]")
+        raise SystemExit(1)
+
+    # Validate new display name (basic sanity)
+    if not new_display_name or not new_display_name.strip():
+        console.print("[red]Display name cannot be empty.[/red]")
+        raise SystemExit(1)
+    if len(new_display_name) > 128:
+        console.print("[red]Display name too long (max 128 chars).[/red]")
+        raise SystemExit(1)
+
+    # Try to find workspace by name or by display name via registry
+    ws_path = get_workspace_path(name)
+    if not workspace_exists(name):
+        # Try looking up in registry by display name
+        from kulshan.workspace.registry import list_registry_entries
+
+        entries = list_registry_entries()
+        matches = [e for e in entries if e.display_name == name]
+        if len(matches) == 1:
+            ws_path = get_workspace_path(matches[0].workspace_dir)
+            name = matches[0].workspace_dir
+        elif len(matches) > 1:
+            console.print(
+                f"[red]Ambiguous: multiple workspaces with display name '{name}'. "
+                f"Use the workspace directory name instead.[/red]"
+            )
+            raise SystemExit(1)
+        else:
+            console.print(f"[red]Workspace not found: {name}[/red]")
+            raise SystemExit(1)
+
+    # Load and update config
+    try:
+        config = read_workspace_config(ws_path)
+    except WorkspaceConfigError as e:
+        console.print(f"[red]{e}[/red]")
+        raise SystemExit(1)
+
+    old_display = config.display_name or name
+    config.display_name = new_display_name.strip()
+
+    try:
+        write_workspace_config(ws_path, config)
+    except Exception as e:
+        console.print(f"[red]Failed to write configuration: {e}[/red]")
+        raise SystemExit(1)
+
+    # Also update registry if this is an auto-onboarded workspace
+    registry_entry = find_entry_by_workspace_dir(name)
+    if registry_entry:
+        update_display_name(
+            profile=registry_entry.profile,
+            role_arn=registry_entry.role_arn,
+            account_id=registry_entry.account_id,
+            new_display_name=new_display_name.strip(),
+        )
+
+    console.print(
+        f"  [green]✓[/green] Renamed [dim]{old_display}[/dim] → "
+        f"[cyan]{new_display_name.strip()}[/cyan]"
+    )
+    console.print()

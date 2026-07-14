@@ -285,22 +285,80 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
             fmt = ext_map[ext]
 
     # ── Workspace-aware execution context ────────────────────────────────
-    from kulshan.workspace.resolution import resolve_workspace as _resolve_ws
+    from kulshan.workspace.resolution import (
+        resolve_workspace as _resolve_ws,
+        resolve_workspace_with_profile,
+    )
     from kulshan.workspace.execution import resolve_aws_execution, AwsExecutionContext
+    from kulshan.workspace.onboarding import auto_onboard, OnboardingError
     from kulshan.workspace.sts import StsVerificationError
     from kulshan.workspace.errors import WorkspaceError
 
     workspace_name = ctx.obj.get("workspace")
     connection_name = ctx.obj.get("connection")
 
-    try:
-        ws_ctx = _resolve_ws(workspace_name)
-    except WorkspaceError as e:
-        console.print(f"[red]{e}[/red]")
-        sys.exit(ExitCode.CONFIG_ERROR)
+    # Determine effective profile for onboarding-aware resolution
+    effective_profile = profile or os.environ.get("AWS_PROFILE")
 
-    if ws_ctx.is_bound:
-        # Bound workspace: use workspace execution resolver
+    # Try onboarding-aware resolution first
+    ws_ctx = None
+    onboarding_result = None
+
+    if workspace_name or connection_name:
+        # Explicit workspace/connection — use traditional resolution
+        try:
+            ws_ctx = _resolve_ws(workspace_name)
+        except WorkspaceError as e:
+            console.print(f"[red]{e}[/red]")
+            sys.exit(ExitCode.CONFIG_ERROR)
+    else:
+        # Automatic routing: check registry, possibly auto-onboard
+        try:
+            ws_ctx = resolve_workspace_with_profile(
+                workspace_name=None,
+                profile=effective_profile,
+                role_arn=role_arn,
+            )
+        except WorkspaceError as e:
+            console.print(f"[red]{e}[/red]")
+            sys.exit(ExitCode.CONFIG_ERROR)
+
+        if ws_ctx is None and effective_profile:
+            # Profile supplied but no registry match — auto-onboard
+            try:
+                onboarding_result = auto_onboard(
+                    profile=effective_profile,
+                    role_arn=role_arn,
+                )
+                ws_ctx = onboarding_result.workspace_context
+                if onboarding_result.is_new:
+                    console.print(
+                        f"  [green]✓[/green] Created environment "
+                        f"[cyan]{onboarding_result.display_name}[/cyan]",
+                        highlight=False,
+                    )
+                console.print(
+                    f"  Using [cyan]{onboarding_result.display_name}[/cyan] "
+                    f"[dim]· {onboarding_result.profile or 'default'}[/dim]",
+                    highlight=False,
+                )
+                console.print()
+            except StsVerificationError as e:
+                console.print(f"[red]{e}[/red]")
+                sys.exit(ExitCode.CONFIG_ERROR)
+            except OnboardingError as e:
+                console.print(f"[red]Environment onboarding failed: {e}[/red]")
+                sys.exit(ExitCode.CONFIG_ERROR)
+        elif ws_ctx is None:
+            # No profile, no registered workspaces — fall back to unbound default
+            try:
+                ws_ctx = _resolve_ws(None)
+            except WorkspaceError as e:
+                console.print(f"[red]{e}[/red]")
+                sys.exit(ExitCode.CONFIG_ERROR)
+
+    if ws_ctx.is_bound and onboarding_result is None:
+        # Bound workspace (explicit or found via registry): use execution resolver
         try:
             exec_ctx = resolve_aws_execution(
                 workspace=ws_ctx,
@@ -323,8 +381,22 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
             else:
                 console.print(f"[red]{e}[/red]")
             sys.exit(ExitCode.CONFIG_ERROR)
+
+        # Show routing message for auto-onboarded workspaces found via registry
+        if not workspace_name and not connection_name:
+            display = ws_ctx.display_name
+            p = effective_profile or "default"
+            console.print(
+                f"  Using [cyan]{display}[/cyan] [dim]· {p}[/dim]",
+                highlight=False,
+            )
+            console.print()
+    elif onboarding_result is not None:
+        # Session already verified during onboarding — reuse it
+        session = onboarding_result.verified_session.session
+        account_id = onboarding_result.verified_session.account_id
     else:
-        # Unbound default: use workspace execution resolver (backward-compatible)
+        # Unbound default (no profile available, no registered workspaces)
         try:
             exec_ctx = resolve_aws_execution(
                 workspace=ws_ctx,
