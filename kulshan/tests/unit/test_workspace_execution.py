@@ -459,8 +459,8 @@ class TestUnboundCompat:
 
 class TestFailClosed:
 
-    def test_24_bound_workspace_security_pack_warned(self, tmp_path):
-        """Security pack on bound workspace shows isolation warning."""
+    def test_24_bound_workspace_security_pack_allowed(self, tmp_path):
+        """Security pack on bound workspace is now allowed (restriction removed)."""
         from kulshan.workspace.resolution import _reset_migration_guard
         _reset_migration_guard()
 
@@ -480,20 +480,30 @@ class TestFailClosed:
         write_workspace_config(default_dir, create_default_workspace_config())
 
         runner = CliRunner()
+        mock_preflight = MagicMock()
+        mock_preflight.passed = True
+        mock_preflight.cur_export = None
+
         with patch("kulshan.workspace.resolution.get_workspaces_root", return_value=ws_root), \
              patch("kulshan.workspace.resolution.get_workspace_path", side_effect=lambda n: ws_root / n), \
              patch("kulshan.workspace.resolution.get_config_file_path", return_value=tmp_path / "c.toml"), \
              patch("kulshan.workspace.migration.get_legacy_history_path", return_value=tmp_path / "x.db"), \
              patch("kulshan.workspace.migration.get_legacy_security_history_path", return_value=tmp_path / "y.db"), \
-             patch(_STS_PATCH, return_value=_sts_ok("111122223333")):
+             patch(_STS_PATCH, return_value=_sts_ok("111122223333")), \
+             patch("kulshan.preflight.run_preflight_with_cur", return_value=mock_preflight), \
+             patch("kulshan.orchestrator.run_all_scans", return_value={}), \
+             patch("kulshan.orchestrator.compute_overall", return_value=(70, "B-")), \
+             patch("kulshan.orchestrator.summarize_completeness", return_value={"partial": False, "skipped": [], "errors": []}), \
+             patch("kulshan.session.get_enabled_regions", return_value=["us-east-1"]):
             result = runner.invoke(main, [
                 "--workspace", "customer-a", "report",
                 "--packs", "security", "--yes",
+                "--regions", "us-east-1", "--no-history",
             ])
 
-        # Should contain the security isolation warning
-        assert "security" in result.output.lower()
-        assert "isolation" in result.output.lower() or "not yet implemented" in result.output.lower()
+        # Should NOT get the old fail-closed error
+        assert "not available yet" not in result.output.lower()
+        assert "isolation" not in result.output.lower()
 
 
 # ---------------------------------------------------------------------------

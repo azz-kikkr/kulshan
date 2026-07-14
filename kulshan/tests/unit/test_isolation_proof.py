@@ -300,10 +300,10 @@ class TestMismatchRedactionProof:
 
 
 class TestSecurityFailClosed:
-    """Security pack must fail closed before execution on bound workspace."""
+    """Security pack is now allowed on bound workspaces (restriction removed)."""
 
-    def test_security_pack_rejects_bound_workspace(self, tmp_path):
-        """Nonzero exit, clear message, no pack execution."""
+    def test_security_pack_allowed_on_bound_workspace(self, tmp_path):
+        """Security pack no longer rejects bound workspaces."""
         from kulshan.workspace.resolution import _reset_migration_guard
         _reset_migration_guard()
 
@@ -313,42 +313,30 @@ class TestSecurityFailClosed:
         verified = _verified("111122223333")
         runner = CliRunner()
 
+        mock_preflight = MagicMock()
+        mock_preflight.passed = True
+        mock_preflight.cur_export = None
+
         with patches["ws_root"], patches["ws_path"], patches["config_file"], \
              patches["legacy_main"], patches["legacy_sec"], \
              patch(_STS_PATCH, return_value=verified), \
-             patch("kulshan.orchestrator.run_all_scans") as mock_scan, \
+             patch("kulshan.preflight.run_preflight_with_cur", return_value=mock_preflight), \
+             patch("kulshan.orchestrator.run_all_scans", return_value={}), \
+             patch("kulshan.orchestrator.compute_overall", return_value=(70, "B-")), \
+             patch("kulshan.orchestrator.summarize_completeness", return_value={"partial": False, "skipped": [], "errors": []}), \
+             patch("kulshan.session.get_enabled_regions", return_value=["us-east-1"]), \
              patch("kulshan.checks.security.scoring.history.save_scan") as mock_global_sec:
             result = runner.invoke(main, [
                 "--workspace", "cust-sec", "report",
                 "--packs", "security", "--yes", "--regions", "us-east-1",
+                "--no-history",
             ])
 
-        # Must exit nonzero
-        assert result.exit_code != 0
+        # Should NOT fail with old restriction message
+        assert "not available yet" not in result.output.lower()
 
-        # Clear error message
-        assert "not available yet" in result.output.lower() or "isolation" in result.output.lower()
-
-        # Pack runner never called
-        mock_scan.assert_not_called()
-
-        # Global security history never called
+        # Global security history still never called (dead code)
         mock_global_sec.assert_not_called()
-
-        # No DB modified
-        ws_db = ws_root / "cust-sec" / "history.db"
-        sec_db = ws_root / "cust-sec" / "security-history.db"
-        legacy_sec = tmp_path / "legacy_sec.db"
-        for db in [ws_db, sec_db, legacy_sec]:
-            if db.exists():
-                conn = sqlite3.connect(db)
-                tables = conn.execute(
-                    "SELECT name FROM sqlite_master WHERE type='table'"
-                ).fetchall()
-                for (tbl,) in tables:
-                    count = conn.execute(f"SELECT COUNT(*) FROM [{tbl}]").fetchone()[0]
-                    assert count == 0, f"Unexpected data in {db}/{tbl}"
-                conn.close()
 
     def test_security_allowed_on_unbound(self, tmp_path):
         """Security pack on unbound workspace does NOT fail closed."""

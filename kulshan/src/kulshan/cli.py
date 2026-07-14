@@ -346,19 +346,6 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
         )
         console.print()
 
-    # ── Fail-closed: security pack not allowed on bound workspaces ───────
-    if ws_ctx.is_bound and "security" in (selected_packs or []):
-        console.print(
-            "  [red]Security pack workspace isolation is not available yet.[/red]"
-        )
-        console.print()
-        console.print(
-            "  Run it from the unbound default workspace, or wait for "
-            "workspace-aware security history support."
-        )
-        console.print()
-        sys.exit(ExitCode.CONFIG_ERROR)
-
     # Pre-flight health check (with CUR discovery)
     from kulshan.preflight import run_preflight_with_cur
     preflight_result = run_preflight_with_cur(session, console=console)
@@ -1056,6 +1043,60 @@ def investigate_cost(
                 click.echo(str(exc), err=True)
                 sys.exit(ExitCode.CONFIG_ERROR)
 
+        # Workspace payer validation (no AWS calls)
+        from kulshan.workspace.resolution import resolve_workspace as _resolve_ws
+        from kulshan.workspace.errors import WorkspaceError
+        from kulshan.cur.duckdb_engine import connect_memory, register_cur_raw
+        from kulshan.cur.source import local_parquet_source
+        from kulshan.cur.payer_validation import (
+            validate_cur_payer,
+            PayerMismatchError,
+            MultiplePayersError,
+        )
+        from kulshan.redact import redact_account_id
+
+        try:
+            ws_ctx = _resolve_ws(None)  # resolve active workspace (no AWS)
+        except WorkspaceError:
+            ws_ctx = None
+
+        expected_payer = None
+        ws_name = None
+        if ws_ctx and ws_ctx.is_bound and ws_ctx.config.aws:
+            expected_payer = ws_ctx.config.aws.payer_account_id
+            ws_name = ws_ctx.name
+
+        if expected_payer:
+            try:
+                _payer_con = connect_memory()
+                _payer_source = local_parquet_source(str(cur_path))
+                register_cur_raw(_payer_con, _payer_source)
+                payer_result = validate_cur_payer(_payer_con, expected_payer, ws_name)
+                _payer_con.close()
+
+                if payer_result.status == "missing":
+                    console.print(
+                        f"  [yellow]Warning:[/yellow] {payer_result.message}"
+                    )
+                    console.print(
+                        f"  [dim]Continuing with unverified local input.[/dim]"
+                    )
+                    console.print()
+            except PayerMismatchError as e:
+                console.print(f"[red]CUR payer mismatch[/red]")
+                console.print()
+                console.print(f"  Workspace:       {e.workspace_name}")
+                console.print(f"  Expected payer:  {redact_account_id(e.expected_payer)}")
+                console.print(f"  CUR payer:       {redact_account_id(e.found_payer)}")
+                console.print()
+                console.print("  The selected CUR data does not belong to this workspace.")
+                sys.exit(ExitCode.CONFIG_ERROR)
+            except MultiplePayersError as e:
+                console.print(f"[red]{e}[/red]")
+                sys.exit(ExitCode.CONFIG_ERROR)
+            except Exception:
+                pass  # Non-fatal: validation failure doesn't block investigation
+
         try:
             brief = investigate_cost_cur(cur_path, month=month)
         except Exception as exc:
@@ -1196,6 +1237,60 @@ def investigate_ec2(cur_path: str, month: str | None, output: str | None) -> Non
         except ValueError as exc:
             click.echo(str(exc), err=True)
             sys.exit(ExitCode.CONFIG_ERROR)
+
+    # Workspace payer validation (no AWS calls)
+    from kulshan.workspace.resolution import resolve_workspace as _resolve_ws
+    from kulshan.workspace.errors import WorkspaceError
+    from kulshan.cur.duckdb_engine import connect_memory, register_cur_raw
+    from kulshan.cur.source import local_parquet_source
+    from kulshan.cur.payer_validation import (
+        validate_cur_payer,
+        PayerMismatchError,
+        MultiplePayersError,
+    )
+    from kulshan.redact import redact_account_id
+
+    try:
+        ws_ctx = _resolve_ws(None)
+    except WorkspaceError:
+        ws_ctx = None
+
+    expected_payer = None
+    ws_name = None
+    if ws_ctx and ws_ctx.is_bound and ws_ctx.config.aws:
+        expected_payer = ws_ctx.config.aws.payer_account_id
+        ws_name = ws_ctx.name
+
+    if expected_payer:
+        try:
+            _payer_con = connect_memory()
+            _payer_source = local_parquet_source(str(cur_path))
+            register_cur_raw(_payer_con, _payer_source)
+            payer_result = validate_cur_payer(_payer_con, expected_payer, ws_name)
+            _payer_con.close()
+
+            if payer_result.status == "missing":
+                console.print(
+                    f"  [yellow]Warning:[/yellow] {payer_result.message}"
+                )
+                console.print(
+                    f"  [dim]Continuing with unverified local input.[/dim]"
+                )
+                console.print()
+        except PayerMismatchError as e:
+            console.print(f"[red]CUR payer mismatch[/red]")
+            console.print()
+            console.print(f"  Workspace:       {e.workspace_name}")
+            console.print(f"  Expected payer:  {redact_account_id(e.expected_payer)}")
+            console.print(f"  CUR payer:       {redact_account_id(e.found_payer)}")
+            console.print()
+            console.print("  The selected CUR data does not belong to this workspace.")
+            sys.exit(ExitCode.CONFIG_ERROR)
+        except MultiplePayersError as e:
+            console.print(f"[red]{e}[/red]")
+            sys.exit(ExitCode.CONFIG_ERROR)
+        except Exception:
+            pass  # Non-fatal
 
     try:
         brief = investigate_ec2_cur(cur_path, month=month)
