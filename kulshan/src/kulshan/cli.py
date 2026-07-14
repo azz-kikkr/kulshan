@@ -146,16 +146,43 @@ def _emit_output(
         )
 
 
+def _validate_workspace_name_callback(
+    ctx: click.Context, param: click.Parameter, value: str | None
+) -> str | None:
+    """Validate workspace name from --workspace option."""
+    if value is None:
+        return None
+    from kulshan.workspace.validation import validate_workspace_name
+    from kulshan.workspace.errors import WorkspaceValidationError
+    try:
+        validate_workspace_name(value, allow_default=True)
+        return value
+    except WorkspaceValidationError as e:
+        raise click.BadParameter(str(e))
+
+
 @click.group(invoke_without_command=True)
 @click.version_option(version=__version__, prog_name="kulshan")
 @click.option("--profile", default=None, help="AWS CLI profile name.")
 @click.option("--role-arn", default=None, help="IAM role ARN to assume.")
+@click.option(
+    "--workspace", "-w",
+    default=None,
+    callback=_validate_workspace_name_callback,
+    help="Workspace name for multi-payer isolation. Overrides KULSHAN_WORKSPACE env var.",
+)
 @click.pass_context
-def main(ctx: click.Context, profile: Optional[str], role_arn: Optional[str]) -> None:
+def main(
+    ctx: click.Context,
+    profile: Optional[str],
+    role_arn: Optional[str],
+    workspace: Optional[str],
+) -> None:
     """Kulshan: local-first AWS FinOps baseline."""
     ctx.ensure_object(dict)
     ctx.obj["profile"] = profile
     ctx.obj["role_arn"] = role_arn
+    ctx.obj["workspace"] = workspace
 
     # Zero-argument landing page
     if ctx.invoked_subcommand is None:
@@ -1425,6 +1452,12 @@ def mcp_serve() -> None:
     from kulshan.mcp_server import run_server
 
     run_server()
+
+
+# -- Workspace commands for multi-payer isolation --
+from kulshan.workspace.cli import workspace as workspace_group  # noqa: E402
+
+main.add_command(workspace_group)
 
 
 @main.command()
