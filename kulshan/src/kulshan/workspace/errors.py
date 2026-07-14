@@ -134,3 +134,18 @@ class RoleArnConflictError(WorkspaceError):
                 f"but --role-arn '{provided_role}' was provided."
             )
         super().__init__(msg)
+
+
+class AmbiguousProfileError(WorkspaceError):
+    """Profile matches multiple connections; --connection required."""
+
+    def __init__(self, workspace_name: str, profile: str, matching_connections: list[str]):
+        self.workspace_name = workspace_name
+        self.profile = profile
+        self.matching_connections = matching_connections
+        connections_str = ", ".join(matching_connections)
+        super().__init__(
+            f"Profile '{profile}' matches multiple connections in workspace "
+            f"'{workspace_name}': {connections_str}. "
+            f"Use --connection to disambiguate."
+        )

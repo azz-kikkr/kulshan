@@ -1,6 +1,7 @@
 """Workspace resolution logic."""
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 
@@ -25,6 +26,12 @@ from kulshan.workspace.paths import (
     get_workspaces_root,
 )
 from kulshan.workspace.validation import validate_workspace_name
+
+logger = logging.getLogger(__name__)
+
+# Track whether migration has been attempted this process to avoid
+# repeated checks on every resolve_workspace() call.
+_migration_attempted: bool = False
 
 
 def get_active_workspace_name() -> str | None:
@@ -137,6 +144,53 @@ def ensure_default_workspace() -> Path:
     return default_path
 
 
+def ensure_workspace_infrastructure() -> None:
+    """
+    Centralized workspace infrastructure initialization.
+
+    Called once per process before workspace resolution. Ensures:
+    1. Default workspace exists.
+    2. Legacy databases are detected and migrated safely.
+
+    Requirements:
+    - No AWS session or STS calls.
+    - Safe to run on every invocation (idempotent, once-per-process guard).
+    - Migration failures do not prevent access to a valid workspace.
+    - Does not print on repeated success (only on first migration or failure).
+    """
+    global _migration_attempted
+    if _migration_attempted:
+        return
+    _migration_attempted = True
+
+    # Ensure default workspace exists first
+    ensure_default_workspace()
+
+    # Run migration (safe, idempotent)
+    try:
+        from kulshan.workspace.migration import migrate_legacy_to_default_workspace
+
+        report = migrate_legacy_to_default_workspace()
+
+        if report.any_failed:
+            # Log warning — don't block workspace access
+            if report.main_history.status == "failed":
+                logger.warning(
+                    "Legacy main history migration failed: %s. "
+                    "Original database preserved at legacy location.",
+                    report.main_history.error,
+                )
+            if report.security_history.status == "failed":
+                logger.warning(
+                    "Legacy security history migration failed: %s. "
+                    "Original database preserved at legacy location.",
+                    report.security_history.error,
+                )
+    except Exception as e:
+        # Migration must never prevent workspace access
+        logger.warning("Workspace migration check failed: %s", e)
+
+
 def resolve_workspace(
     workspace_name: str | None = None,
 ) -> WorkspaceContext:
@@ -180,9 +234,8 @@ def resolve_workspace(
     # Validate name (allow "default")
     validate_workspace_name(resolved_name, allow_default=True)
     
-    # Ensure default exists if that's what we're resolving
-    if resolved_name == "default":
-        ensure_default_workspace()
+    # Run infrastructure initialization (once per process)
+    ensure_workspace_infrastructure()
     
     # Get workspace path
     workspace_path = get_workspace_path(resolved_name)
@@ -200,3 +253,9 @@ def resolve_workspace(
     
     # Build context
     return WorkspaceContext.from_path(workspace_path, config)
+
+
+def _reset_migration_guard() -> None:
+    """Reset the once-per-process migration guard. For testing only."""
+    global _migration_attempted
+    _migration_attempted = False

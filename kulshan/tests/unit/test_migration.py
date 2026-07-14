@@ -352,7 +352,7 @@ class TestScenario5DestinationExists:
         # Should skip, not overwrite
         assert report.main_history.status == "skipped"
         assert report.main_history.error is not None
-        assert "already contains data" in report.main_history.error
+        assert "different data" in report.main_history.error
 
         # Source is preserved (not renamed)
         assert legacy_main.exists()

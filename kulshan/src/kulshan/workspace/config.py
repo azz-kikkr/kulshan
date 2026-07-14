@@ -105,8 +105,27 @@ class WorkspaceAwsConfig:
         return next((c for c in self.connections if c.name == name), None)
 
     def get_connection_by_profile(self, profile: str) -> AwsConnection | None:
-        """Get connection by profile name."""
-        return next((c for c in self.connections if c.profile == profile), None)
+        """Get connection by profile name.
+
+        Returns:
+            The connection if exactly one matches, None if zero match.
+
+        Raises:
+            AmbiguousProfileError: If more than one connection uses the profile.
+        """
+        from kulshan.workspace.errors import AmbiguousProfileError
+
+        matches = [c for c in self.connections if c.profile == profile]
+        if len(matches) == 0:
+            return None
+        if len(matches) == 1:
+            return matches[0]
+        # Multiple matches — ambiguous
+        raise AmbiguousProfileError(
+            workspace_name="(unknown)",  # caller should supply context
+            profile=profile,
+            matching_connections=[c.name for c in matches],
+        )
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for TOML serialization."""
@@ -231,6 +250,14 @@ class WorkspaceConfig:
             raise WorkspaceConfigError(
                 workspace_name,
                 "Bound workspace must have at least one AWS connection.",
+            )
+
+        # Only 'default' may be unbound — named workspaces must be bound
+        if binding_mode == "unbound" and workspace_name != "default":
+            raise WorkspaceConfigError(
+                workspace_name,
+                "Only the 'default' workspace may be unbound. "
+                "Named workspaces must have binding_mode='bound' with AWS configuration.",
             )
 
         # Validate schema version

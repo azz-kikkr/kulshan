@@ -179,14 +179,51 @@ def _migrate_single_database(
             source_path=source_path,
         )
 
-    # Destination already exists with data — don't overwrite
+    # Destination already exists — validate it properly
     if dest_path.exists() and dest_path.stat().st_size > 0:
-        if _destination_has_data(dest_path, expected_table):
+        dest_integrity = _check_integrity(dest_path)
+        if dest_integrity:
+            # Corrupt destination — fail safely, don't ignore valid source
+            return SingleMigrationResult(
+                status="failed",
+                source_path=source_path,
+                dest_path=dest_path,
+                error=(
+                    f"Destination exists but is corrupt: {dest_integrity}. "
+                    "Cannot migrate; manual intervention required."
+                ),
+            )
+
+        dest_has_table = _count_rows(dest_path, expected_table) is not None
+        if dest_has_table and _destination_has_data(dest_path, expected_table):
+            # Destination has data — check if it matches source (reconcile)
+            source_ids = _get_id_set(source_path, expected_table)
+            dest_ids = _get_id_set(dest_path, expected_table)
+            if source_ids == dest_ids:
+                # Already migrated, metadata may be stale — reconcile
+                migrated_path = source_path.with_suffix(
+                    source_path.suffix + ".migrated"
+                )
+                if not migrated_path.exists():
+                    try:
+                        source_path.rename(migrated_path)
+                    except OSError:
+                        pass
+                return SingleMigrationResult(
+                    status="migrated",
+                    source_path=source_path,
+                    dest_path=dest_path,
+                    row_count=len(dest_ids),
+                )
+            # Destination has different data — never overwrite
             return SingleMigrationResult(
                 status="skipped",
                 source_path=source_path,
                 dest_path=dest_path,
-                error="Destination already contains data; skipping to avoid data loss.",
+                error=(
+                    "Destination already contains different data; "
+                    "skipping to avoid data loss."
+                ),
             )
 
     # Run integrity check on source
@@ -207,6 +244,9 @@ def _migrate_single_database(
             error=f"Source does not contain expected table '{expected_table}'.",
         )
 
+    # Get source ID set for post-backup verification
+    source_ids = _get_id_set(source_path, expected_table)
+
     # Perform SQLite backup
     backup_error = _sqlite_backup(source_path, dest_path)
     if backup_error:
@@ -215,24 +255,6 @@ def _migrate_single_database(
             source_path=source_path,
             dest_path=dest_path,
             error=f"SQLite backup failed: {backup_error}",
-        )
-
-    # Verify destination
-    dest_count = _count_rows(dest_path, expected_table)
-    if dest_count != source_count:
-        # Verification failed — remove corrupt destination
-        try:
-            dest_path.unlink()
-        except OSError:
-            pass
-        return SingleMigrationResult(
-            status="failed",
-            source_path=source_path,
-            dest_path=dest_path,
-            error=(
-                f"Row count mismatch after backup: "
-                f"source={source_count}, dest={dest_count}"
-            ),
         )
 
     # Verify destination integrity
@@ -249,15 +271,55 @@ def _migrate_single_database(
             error=f"Destination integrity check failed: {dest_integrity}",
         )
 
+    # Verify destination row count
+    dest_count = _count_rows(dest_path, expected_table)
+    if dest_count != source_count:
+        try:
+            dest_path.unlink()
+        except OSError:
+            pass
+        return SingleMigrationResult(
+            status="failed",
+            source_path=source_path,
+            dest_path=dest_path,
+            error=(
+                f"Row count mismatch after backup: "
+                f"source={source_count}, dest={dest_count}"
+            ),
+        )
+
+    # Verify primary key set identity
+    dest_ids = _get_id_set(dest_path, expected_table)
+    if source_ids != dest_ids:
+        try:
+            dest_path.unlink()
+        except OSError:
+            pass
+        return SingleMigrationResult(
+            status="failed",
+            source_path=source_path,
+            dest_path=dest_path,
+            error="Primary key set mismatch between source and destination.",
+        )
+
     # Success — rename source to .migrated
     migrated_path = source_path.with_suffix(source_path.suffix + ".migrated")
-    try:
-        source_path.rename(migrated_path)
-    except OSError as e:
-        # Migration succeeded even if rename fails — data is safe
+    if migrated_path.exists():
+        # Never overwrite an existing .migrated backup
         logger.warning(
-            "Migration succeeded but could not rename source: %s", e
+            "Migration succeeded but .migrated backup already exists at %s. "
+            "Source preserved at %s.",
+            migrated_path,
+            source_path,
         )
+    else:
+        try:
+            source_path.rename(migrated_path)
+        except OSError as e:
+            # Migration succeeded even if rename fails — data is safe
+            logger.warning(
+                "Migration succeeded but could not rename source: %s", e
+            )
 
     return SingleMigrationResult(
         status="migrated",
@@ -319,6 +381,28 @@ def _destination_has_data(db_path: Path, table_name: str) -> bool:
     """Check if destination database already has rows in the expected table."""
     count = _count_rows(db_path, table_name)
     return count is not None and count > 0
+
+
+def _get_id_set(db_path: Path, table_name: str) -> set[str]:
+    """
+    Get the complete primary key set from a table.
+
+    Works for both main history (TEXT id) and security history (INTEGER id).
+
+    Returns:
+        Set of string-ified primary key values, or empty set on error.
+    """
+    try:
+        conn = sqlite3.connect(db_path)
+        try:
+            rows = conn.execute(
+                f"SELECT id FROM [{table_name}] ORDER BY id"
+            ).fetchall()
+            return {str(row[0]) for row in rows}
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return set()
 
 
 def _sqlite_backup(source_path: Path, dest_path: Path) -> str | None:

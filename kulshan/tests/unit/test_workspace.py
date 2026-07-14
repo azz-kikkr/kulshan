@@ -41,6 +41,7 @@ from kulshan.workspace.resolution import (
     resolve_workspace,
     set_active_workspace_name,
     workspace_exists,
+    _reset_migration_guard,
 )
 from kulshan.workspace.validation import (
     validate_account_id,
@@ -247,17 +248,17 @@ class TestWorkspaceConfig:
 
     def test_unbound_config_roundtrip(self, tmp_path):
         """Unbound workspace config survives write/read cycle."""
-        ws_dir = tmp_path / "test-ws"
+        ws_dir = tmp_path / "default"
         ws_dir.mkdir()
         config = WorkspaceConfig(
-            name="test-ws",
+            name="default",
             binding_mode="unbound",
             display_name="Test Workspace",
         )
         write_workspace_config(ws_dir, config)
         loaded = read_workspace_config(ws_dir)
 
-        assert loaded.name == "test-ws"
+        assert loaded.name == "default"
         assert loaded.binding_mode == "unbound"
         assert loaded.display_name == "Test Workspace"
         assert loaded.aws is None
@@ -303,14 +304,14 @@ class TestWorkspaceConfig:
     def test_migration_status_roundtrip(self, tmp_path):
         """Migration status fields survive write/read."""
         config = WorkspaceConfig(
-            name="test-ws",
+            name="default",
             binding_mode="unbound",
             migration=WorkspaceMigrationStatus(
                 main_history="migrated",
                 security_history="failed",
             ),
         )
-        ws_dir = tmp_path / "test-ws"
+        ws_dir = tmp_path / "default"
         ws_dir.mkdir()
         write_workspace_config(ws_dir, config)
         loaded = read_workspace_config(ws_dir)
@@ -322,14 +323,14 @@ class TestWorkspaceConfig:
     def test_binding_mode_independent_of_migration(self, tmp_path):
         """Binding mode and migration state are independent."""
         config = WorkspaceConfig(
-            name="test-ws",
+            name="default",
             binding_mode="unbound",
             migration=WorkspaceMigrationStatus(
                 main_history="migrated",
                 security_history="migrated",
             ),
         )
-        ws_dir = tmp_path / "test-ws"
+        ws_dir = tmp_path / "default"
         ws_dir.mkdir()
         write_workspace_config(ws_dir, config)
         loaded = read_workspace_config(ws_dir)
@@ -436,13 +437,13 @@ class TestAtomicWrites:
 
     def test_write_overwrites_existing(self, tmp_path):
         """Writing config overwrites existing workspace.toml."""
-        ws_dir = tmp_path / "test-ws"
+        ws_dir = tmp_path / "default"
         ws_dir.mkdir()
 
-        config1 = WorkspaceConfig(name="test-ws", display_name="First")
+        config1 = WorkspaceConfig(name="default", display_name="First")
         write_workspace_config(ws_dir, config1)
 
-        config2 = WorkspaceConfig(name="test-ws", display_name="Second")
+        config2 = WorkspaceConfig(name="default", display_name="Second")
         write_workspace_config(ws_dir, config2)
 
         loaded = read_workspace_config(ws_dir)
@@ -468,13 +469,24 @@ class TestResolveWorkspace:
         config = create_default_workspace_config()
         write_workspace_config(default_dir, config)
 
-        # Create customer-a workspace
+        # Create customer-a workspace (bound)
         cust_dir = ws_root / "customer-a"
         cust_dir.mkdir(parents=True)
         cust_config = WorkspaceConfig(
             name="customer-a",
-            binding_mode="unbound",
+            binding_mode="bound",
             display_name="Customer A",
+            aws=WorkspaceAwsConfig(
+                payer_account_id="111122223333",
+                default_connection="main",
+                connections=[
+                    AwsConnection(
+                        name="main",
+                        profile="cust-a",
+                        expected_session_account_id="111122223333",
+                    )
+                ],
+            ),
         )
         write_workspace_config(cust_dir, cust_config)
 
@@ -482,28 +494,35 @@ class TestResolveWorkspace:
 
     def test_explicit_name_takes_precedence(self, tmp_path):
         """--workspace parameter wins over env and config."""
+        _reset_migration_guard()
         ws_root, config_dir = self._setup_workspaces(tmp_path)
 
         with patch("kulshan.workspace.resolution.get_workspaces_root", return_value=ws_root), \
              patch("kulshan.workspace.resolution.get_workspace_path", side_effect=lambda n: ws_root / n), \
              patch("kulshan.workspace.resolution.get_config_file_path", return_value=config_dir / "config.toml"), \
+             patch("kulshan.workspace.migration.get_legacy_history_path", return_value=tmp_path / "noexist.db"), \
+             patch("kulshan.workspace.migration.get_legacy_security_history_path", return_value=tmp_path / "noexist2.db"), \
              patch.dict(os.environ, {"KULSHAN_WORKSPACE": "default"}):
             ctx = resolve_workspace("customer-a")
             assert ctx.name == "customer-a"
 
     def test_env_var_when_no_explicit(self, tmp_path):
         """KULSHAN_WORKSPACE env var wins when no explicit param."""
+        _reset_migration_guard()
         ws_root, config_dir = self._setup_workspaces(tmp_path)
 
         with patch("kulshan.workspace.resolution.get_workspaces_root", return_value=ws_root), \
              patch("kulshan.workspace.resolution.get_workspace_path", side_effect=lambda n: ws_root / n), \
              patch("kulshan.workspace.resolution.get_config_file_path", return_value=config_dir / "config.toml"), \
+             patch("kulshan.workspace.migration.get_legacy_history_path", return_value=tmp_path / "noexist.db"), \
+             patch("kulshan.workspace.migration.get_legacy_security_history_path", return_value=tmp_path / "noexist2.db"), \
              patch.dict(os.environ, {"KULSHAN_WORKSPACE": "customer-a"}):
             ctx = resolve_workspace(None)
             assert ctx.name == "customer-a"
 
     def test_config_active_when_no_env(self, tmp_path):
         """Saved active workspace wins when no env var."""
+        _reset_migration_guard()
         ws_root, config_dir = self._setup_workspaces(tmp_path)
         config_dir.mkdir(parents=True, exist_ok=True)
 
@@ -511,6 +530,8 @@ class TestResolveWorkspace:
              patch("kulshan.workspace.resolution.get_workspace_path", side_effect=lambda n: ws_root / n), \
              patch("kulshan.workspace.resolution.get_config_file_path", return_value=config_dir / "config.toml"), \
              patch("kulshan.workspace.resolution.get_active_workspace_name", return_value="customer-a"), \
+             patch("kulshan.workspace.migration.get_legacy_history_path", return_value=tmp_path / "noexist.db"), \
+             patch("kulshan.workspace.migration.get_legacy_security_history_path", return_value=tmp_path / "noexist2.db"), \
              patch.dict(os.environ, {}, clear=True):
             # Remove KULSHAN_WORKSPACE if present
             os.environ.pop("KULSHAN_WORKSPACE", None)
@@ -519,6 +540,7 @@ class TestResolveWorkspace:
 
     def test_falls_back_to_default(self, tmp_path):
         """Falls back to 'default' when nothing else specified."""
+        _reset_migration_guard()
         ws_root = tmp_path / "workspaces"
         config_dir = tmp_path / "config"
         config_dir.mkdir(parents=True, exist_ok=True)
@@ -526,6 +548,8 @@ class TestResolveWorkspace:
         with patch("kulshan.workspace.resolution.get_workspaces_root", return_value=ws_root), \
              patch("kulshan.workspace.resolution.get_workspace_path", side_effect=lambda n: ws_root / n), \
              patch("kulshan.workspace.resolution.get_config_file_path", return_value=config_dir / "config.toml"), \
+             patch("kulshan.workspace.migration.get_legacy_history_path", return_value=tmp_path / "noexist.db"), \
+             patch("kulshan.workspace.migration.get_legacy_security_history_path", return_value=tmp_path / "noexist2.db"), \
              patch.dict(os.environ, {}, clear=True):
             os.environ.pop("KULSHAN_WORKSPACE", None)
             ctx = resolve_workspace(None)
@@ -982,32 +1006,32 @@ class TestSchemaVersionValidation:
         """Future schema version is rejected with clear error."""
         data = {
             "schema_version": 99,
-            "name": "test-ws",
+            "name": "default",
             "binding_mode": "unbound",
         }
         with pytest.raises(WorkspaceConfigError) as exc:
-            WorkspaceConfig.from_dict(data, "test-ws")
+            WorkspaceConfig.from_dict(data, "default")
         assert "Unsupported schema_version" in str(exc.value)
         assert "99" in str(exc.value)
 
     def test_schema_version_0_rejected(self):
         data = {
             "schema_version": 0,
-            "name": "test-ws",
+            "name": "default",
             "binding_mode": "unbound",
         }
         with pytest.raises(WorkspaceConfigError) as exc:
-            WorkspaceConfig.from_dict(data, "test-ws")
+            WorkspaceConfig.from_dict(data, "default")
         assert "Unsupported schema_version" in str(exc.value)
 
     def test_current_schema_version_accepted(self):
         from kulshan.workspace.config import SCHEMA_VERSION
         data = {
             "schema_version": SCHEMA_VERSION,
-            "name": "test-ws",
+            "name": "default",
             "binding_mode": "unbound",
         }
-        config = WorkspaceConfig.from_dict(data, "test-ws")
+        config = WorkspaceConfig.from_dict(data, "default")
         assert config.schema_version == SCHEMA_VERSION
 
 
