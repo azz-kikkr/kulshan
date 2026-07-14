@@ -1326,11 +1326,31 @@ def init(force: bool) -> None:
     click.echo(f"Created {config_path}")
 
 
+def _validate_account_id(ctx: click.Context, param: click.Parameter, value: str | None) -> str | None:
+    """Validate that account ID is exactly 12 digits."""
+    if value is None:
+        return None
+    if not value.isdigit() or len(value) != 12:
+        raise click.BadParameter("Account ID must be exactly 12 digits.")
+    return value
+
+
 @main.command()
 @click.option("--limit", "-n", default=20, type=int, help="Number of past scans to show.")
 @click.option("--show-pii", is_flag=True, default=False, help="Show full account IDs (redacted by default).")
-def history(limit: int, show_pii: bool) -> None:
-    """Show past scan history with scores and trends."""
+@click.option(
+    "--account",
+    default=None,
+    callback=_validate_account_id,
+    help="Filter by AWS account ID (12 digits). This is the credential account used during the scan.",
+)
+def history(limit: int, show_pii: bool, account: str | None) -> None:
+    """Show past scan history with scores and trends.
+
+    The account ID stored in history is the credential account from
+    sts:GetCallerIdentity at scan time, not necessarily the payer
+    or linked accounts being analyzed.
+    """
     from rich.console import Console as RichConsole
     from rich.table import Table
     from kulshan.redact import redact_account_id
@@ -1340,14 +1360,17 @@ def history(limit: int, show_pii: bool) -> None:
     try:
         from kulshan.history import HistoryStore
         store = HistoryStore()
-        scans = store.list_scans(limit=limit)
+        scans = store.list_scans(limit=limit, account_id=account)
         store.close()
     except Exception as e:
         console.print(f"[red]Could not read history: {e}[/red]")
         raise SystemExit(1)
 
     if not scans:
-        console.print("[dim]No scan history found. Run 'Kulshan Report' to create your first scan.[/dim]")
+        if account:
+            console.print(f"[dim]No scan history found for account {account}.[/dim]")
+        else:
+            console.print("[dim]No scan history found. Run 'kulshan report' to create your first scan.[/dim]")
         return
 
     table = Table(title="Scan History", show_lines=False)

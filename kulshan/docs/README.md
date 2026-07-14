@@ -179,6 +179,22 @@ kulshan history [OPTIONS]
 |--------|-------------|
 | `-n, --limit INTEGER` | Number of past scans to show |
 | `--show-pii` | Show full account IDs (redacted by default) |
+| `--account TEXT` | Filter by AWS account ID (must be exactly 12 digits) |
+
+**Note:** The account ID stored in history is the credential account from `sts:GetCallerIdentity` at scan time. This is the account whose credentials were used to run the scan, not necessarily the payer account or linked accounts being analyzed.
+
+**Examples:**
+
+```bash
+# Show all history
+kulshan history
+
+# Filter by account
+kulshan history --account 123456789012
+
+# Show more results with full account IDs
+kulshan history --limit 50 --show-pii
+```
 
 ---
 

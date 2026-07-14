@@ -21,9 +21,9 @@ def _memory_store() -> HistoryStore:
     return store
 
 
-def _save_scan(store: HistoryStore) -> str:
+def _save_scan(store: HistoryStore, account_id: str = "123456789012") -> str:
     return store.save_scan(
-        account_id="123456789012",
+        account_id=account_id,
         regions=["us-east-1"],
         duration_seconds=1.5,
         overall_score=80,
@@ -90,3 +90,107 @@ def test_delete_history_command():
     assert "Deleted 1 scan(s)" in result.output
     close_spy.assert_called_once_with()
     assert store._conn is None
+
+
+
+# ---------------------------------------------------------------------------
+# Phase 1: --account filter tests
+# ---------------------------------------------------------------------------
+
+
+def test_history_account_filter_valid_12_digits():
+    """Valid 12-digit account ID is accepted and filters correctly."""
+    store = _memory_store()
+    _save_scan(store, account_id="111122223333")
+    _save_scan(store, account_id="444455556666")
+
+    # Test the filter at the store level (avoids Rich table truncation issues)
+    filtered = store.list_scans(limit=20, account_id="111122223333")
+    assert len(filtered) == 1
+    assert filtered[0]["account_id"] == "111122223333"
+
+    # Test CLI accepts the option without error
+    runner = CliRunner()
+    with patch("kulshan.history.HistoryStore", return_value=store):
+        result = runner.invoke(main, ["history", "--account", "111122223333"])
+
+    assert result.exit_code == 0
+    assert "Scan History" in result.output  # Table renders
+
+
+def test_history_account_filter_invalid_not_12_digits():
+    """Account ID that is not exactly 12 digits is rejected."""
+    runner = CliRunner()
+    result = runner.invoke(main, ["history", "--account", "12345"])
+
+    assert result.exit_code != 0
+    assert "12 digits" in result.output
+
+
+def test_history_account_filter_invalid_non_numeric():
+    """Account ID with non-numeric characters is rejected."""
+    runner = CliRunner()
+    result = runner.invoke(main, ["history", "--account", "12345678901a"])
+
+    assert result.exit_code != 0
+    assert "12 digits" in result.output
+
+
+def test_history_account_filter_no_match_shows_empty_message():
+    """When no scans match the account filter, show a clear message."""
+    store = _memory_store()
+    _save_scan(store, account_id="111122223333")
+
+    runner = CliRunner()
+    with patch("kulshan.history.HistoryStore", return_value=store):
+        result = runner.invoke(main, ["history", "--account", "999988887777"])
+
+    assert result.exit_code == 0
+    assert "No scan history found for account 999988887777" in result.output
+
+
+def test_history_without_account_filter_shows_all():
+    """Without --account, all scans are shown (existing behavior)."""
+    store = _memory_store()
+    _save_scan(store, account_id="111122223333")
+    _save_scan(store, account_id="444455556666")
+
+    # Test at store level
+    all_scans = store.list_scans(limit=20)
+    assert len(all_scans) == 2
+
+    # Test CLI shows table
+    runner = CliRunner()
+    with patch("kulshan.history.HistoryStore", return_value=store):
+        result = runner.invoke(main, ["history"])
+
+    assert result.exit_code == 0
+    assert "Scan History" in result.output
+
+
+def test_history_empty_without_filter_shows_generic_message():
+    """Empty history without filter shows generic empty message."""
+    store = _memory_store()
+
+    runner = CliRunner()
+    with patch("kulshan.history.HistoryStore", return_value=store):
+        result = runner.invoke(main, ["history"])
+
+    assert result.exit_code == 0
+    assert "No scan history found. Run 'kulshan report'" in result.output
+
+
+def test_history_account_filter_passes_to_list_scans():
+    """The --account filter is passed to list_scans correctly."""
+    store = _memory_store()
+    _save_scan(store, account_id="111122223333")
+    _save_scan(store, account_id="444455556666")
+
+    # Verify filtering works at the database level
+    filtered = store.list_scans(limit=20, account_id="111122223333")
+    assert len(filtered) == 1
+    assert filtered[0]["account_id"] == "111122223333"
+
+    # Verify no results for non-existent account
+    empty = store.list_scans(limit=20, account_id="999999999999")
+    assert len(empty) == 0
