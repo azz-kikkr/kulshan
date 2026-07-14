@@ -310,7 +310,16 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
             session = exec_ctx.session
             account_id = exec_ctx.session_account_id
         except (WorkspaceError, StsVerificationError) as e:
-            console.print(f"[red]{e}[/red]")
+            from kulshan.redact import redact_account_id, redact_arn
+            from kulshan.workspace.errors import WorkspaceCredentialMismatchError
+            if isinstance(e, WorkspaceCredentialMismatchError) and not show_pii:
+                console.print(
+                    f"[red]Credential mismatch for workspace '{e.workspace_name}': "
+                    f"expected account {redact_account_id(e.expected_account)}, "
+                    f"got {redact_account_id(e.actual_account)}.[/red]"
+                )
+            else:
+                console.print(f"[red]{e}[/red]")
             sys.exit(ExitCode.CONFIG_ERROR)
     else:
         # Unbound default: use workspace execution resolver (backward-compatible)
@@ -337,17 +346,18 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
         )
         console.print()
 
-    # ── Fail-closed: security pack history not yet workspace-isolated ─────
+    # ── Fail-closed: security pack not allowed on bound workspaces ───────
     if ws_ctx.is_bound and "security" in (selected_packs or []):
         console.print(
-            "  [yellow]⚠ Security pack history isolation is not yet implemented "
-            "for bound workspaces.[/yellow]"
-        )
-        console.print(
-            "  [dim]Security findings will be included in the report output, but "
-            "security trend history will not be written until Commit 5.[/dim]"
+            "  [red]Security pack workspace isolation is not available yet.[/red]"
         )
         console.print()
+        console.print(
+            "  Run it from the unbound default workspace, or wait for "
+            "workspace-aware security history support."
+        )
+        console.print()
+        sys.exit(ExitCode.CONFIG_ERROR)
 
     # Pre-flight health check (with CUR discovery)
     from kulshan.preflight import run_preflight_with_cur
