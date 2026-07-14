@@ -29,6 +29,7 @@ from kulshan.workspace.paths import get_workspace_path
 from kulshan.workspace.sts import (
     StsVerificationError,
     StsVerificationResult,
+    VerifiedAwsSession,
     verify_credentials,
 )
 
@@ -39,16 +40,20 @@ from kulshan.workspace.sts import (
 
 
 def _mock_sts_success(account_id: str = "111122223333"):
-    """Return a mock verify_credentials that succeeds."""
-    return StsVerificationResult(
+    """Return a mock VerifiedAwsSession that succeeds."""
+    from unittest.mock import MagicMock
+    return VerifiedAwsSession(
+        session=MagicMock(),
         account_id=account_id,
         arn=f"arn:aws:iam::{account_id}:user/test",
         user_id="AIDAEXAMPLE",
+        resolved_profile="test-prof",
+        role_arn=None,
     )
 
 
-# The verify_credentials is imported locally in CLI functions, so we patch the source
-_STS_PATCH = "kulshan.workspace.sts.verify_credentials"
+# The create_verified_session is imported locally in CLI functions, so we patch the source
+_STS_PATCH = "kulshan.workspace.sts.create_verified_session"
 
 
 def _create_bound_workspace(ws_root: Path, name: str, payer: str = "999999999999"):

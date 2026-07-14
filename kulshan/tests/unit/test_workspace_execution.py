@@ -33,15 +33,27 @@ from kulshan.workspace.execution import (
     _reset_unbound_warning,
     resolve_aws_execution,
 )
-from kulshan.workspace.sts import StsVerificationError, StsVerificationResult
+from kulshan.workspace.sts import StsVerificationError, StsVerificationResult, VerifiedAwsSession
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-_STS_PATCH = "kulshan.workspace.execution.verify_credentials"
-_BUILD_SESSION_PATCH = "kulshan.workspace.execution._build_session"
+_STS_PATCH = "kulshan.workspace.execution.create_verified_session"
+
+
+def _sts_ok(account_id="111122223333"):
+    """Return a mock VerifiedAwsSession."""
+    from unittest.mock import MagicMock
+    return VerifiedAwsSession(
+        session=MagicMock(),
+        account_id=account_id,
+        arn=f"arn:aws:iam::{account_id}:user/test",
+        user_id="AIDAEXAMPLE",
+        resolved_profile="test-prof",
+        role_arn=None,
+    )
 
 
 def _bound_workspace(tmp_path: Path, connections=None, default_conn="main"):
@@ -78,14 +90,6 @@ def _unbound_workspace(tmp_path: Path):
     return WorkspaceContext.from_path(ws_dir, config)
 
 
-def _sts_ok(account_id="111122223333"):
-    return StsVerificationResult(
-        account_id=account_id,
-        arn=f"arn:aws:iam::{account_id}:user/test",
-        user_id="AIDAEXAMPLE",
-    )
-
-
 # ---------------------------------------------------------------------------
 # 1. Default connection selected for bound workspace
 # ---------------------------------------------------------------------------
@@ -94,8 +98,7 @@ class TestBoundConnectionSelection:
 
     def test_01_default_connection_selected(self, tmp_path):
         ws = _bound_workspace(tmp_path)
-        with patch(_STS_PATCH, return_value=_sts_ok("111122223333")), \
-             patch(_BUILD_SESSION_PATCH, return_value=MagicMock()):
+        with patch(_STS_PATCH, return_value=_sts_ok("111122223333")):
             ctx = resolve_aws_execution(ws)
         assert ctx.connection.name == "main"
         assert ctx.session_account_id == "111122223333"
@@ -105,8 +108,7 @@ class TestBoundConnectionSelection:
             AwsConnection(name="main", profile="p1", expected_session_account_id="111122223333"),
             AwsConnection(name="audit", profile="p2", expected_session_account_id="444455556666"),
         ])
-        with patch(_STS_PATCH, return_value=_sts_ok("444455556666")), \
-             patch(_BUILD_SESSION_PATCH, return_value=MagicMock()):
+        with patch(_STS_PATCH, return_value=_sts_ok("444455556666")):
             ctx = resolve_aws_execution(ws, connection_name="audit")
         assert ctx.connection.name == "audit"
 
@@ -115,15 +117,13 @@ class TestBoundConnectionSelection:
             AwsConnection(name="main", profile="p1", expected_session_account_id="111122223333"),
             AwsConnection(name="audit", profile="p2", expected_session_account_id="444455556666"),
         ])
-        with patch(_STS_PATCH, return_value=_sts_ok("444455556666")), \
-             patch(_BUILD_SESSION_PATCH, return_value=MagicMock()):
+        with patch(_STS_PATCH, return_value=_sts_ok("444455556666")):
             ctx = resolve_aws_execution(ws, profile="p2")
         assert ctx.connection.name == "audit"
 
     def test_04_matching_connection_and_profile_works(self, tmp_path):
         ws = _bound_workspace(tmp_path)
-        with patch(_STS_PATCH, return_value=_sts_ok("111122223333")), \
-             patch(_BUILD_SESSION_PATCH, return_value=MagicMock()):
+        with patch(_STS_PATCH, return_value=_sts_ok("111122223333")):
             ctx = resolve_aws_execution(ws, connection_name="main", profile="main-prof")
         assert ctx.connection.name == "main"
 
@@ -165,7 +165,6 @@ class TestAwsProfileEnv:
         """AWS_PROFILE env var is ignored for bound workspaces."""
         ws = _bound_workspace(tmp_path)
         with patch(_STS_PATCH, return_value=_sts_ok("111122223333")), \
-             patch(_BUILD_SESSION_PATCH, return_value=MagicMock()), \
              patch.dict(os.environ, {"AWS_PROFILE": "some-other-profile"}):
             ctx = resolve_aws_execution(ws)
         # Should use workspace default connection, not AWS_PROFILE
@@ -173,18 +172,9 @@ class TestAwsProfileEnv:
 
     def test_10_aws_profile_works_for_unbound(self, tmp_path):
         """AWS_PROFILE is used for unbound default workspace."""
-        _reset_unbound_warning()
         ws = _unbound_workspace(tmp_path)
-        mock_session = MagicMock()
-        mock_sts = MagicMock()
-        mock_sts.get_caller_identity.return_value = {
-            "Account": "555566667777",
-            "Arn": "arn:aws:iam::555566667777:user/test",
-            "UserId": "AIDA123",
-        }
-        mock_session.client.return_value = mock_sts
 
-        with patch(_BUILD_SESSION_PATCH, return_value=mock_session), \
+        with patch(_STS_PATCH, return_value=_sts_ok("555566667777")), \
              patch.dict(os.environ, {"AWS_PROFILE": "my-sso"}):
             ctx = resolve_aws_execution(ws)
 
@@ -208,9 +198,9 @@ class TestRoleEnforcement:
             ),
         ])
         with patch(_STS_PATCH, return_value=_sts_ok("222233334444")) as mock, \
-             patch(_BUILD_SESSION_PATCH, return_value=MagicMock()):
+             patch.dict(os.environ, {}, clear=True):
             ctx = resolve_aws_execution(ws)
-        # verify_credentials was called with the role
+        # verify was called with the role
         mock.assert_called_once_with(
             profile="p1",
             role_arn="arn:aws:iam::222233334444:role/Kulshan",
@@ -225,8 +215,7 @@ class TestRoleEnforcement:
                 role_arn="arn:aws:iam::222233334444:role/Kulshan",
             ),
         ])
-        with patch(_STS_PATCH, return_value=_sts_ok("222233334444")), \
-             patch(_BUILD_SESSION_PATCH, return_value=MagicMock()):
+        with patch(_STS_PATCH, return_value=_sts_ok("222233334444")):
             ctx = resolve_aws_execution(
                 ws, role_arn="arn:aws:iam::222233334444:role/Kulshan"
             )
@@ -271,8 +260,7 @@ class TestCredentialValidation:
             ),
         ])
         # STS returns wrong account
-        with patch(_STS_PATCH, return_value=_sts_ok("999999999999")), \
-             patch(_BUILD_SESSION_PATCH, return_value=MagicMock()):
+        with patch(_STS_PATCH, return_value=_sts_ok("999999999999")):
             with pytest.raises(WorkspaceCredentialMismatchError) as exc:
                 resolve_aws_execution(ws)
         assert "222233334444" in str(exc.value) or "mismatch" in str(exc.value).lower()
@@ -280,8 +268,7 @@ class TestCredentialValidation:
     def test_16_credential_mismatch_before_scan(self, tmp_path):
         """Mismatch occurs before any scan (resolve_aws_execution raises)."""
         ws = _bound_workspace(tmp_path)
-        with patch(_STS_PATCH, return_value=_sts_ok("999999999999")), \
-             patch(_BUILD_SESSION_PATCH, return_value=MagicMock()):
+        with patch(_STS_PATCH, return_value=_sts_ok("999999999999")):
             with pytest.raises(WorkspaceCredentialMismatchError):
                 resolve_aws_execution(ws)
         # No session returned = no scan possible
@@ -443,16 +430,9 @@ class TestUnboundCompat:
 
     def test_22_unbound_default_backward_compatible(self, tmp_path):
         """Unbound default workspace uses standard boto3 chain."""
-        _reset_unbound_warning()
         ws = _unbound_workspace(tmp_path)
-        mock_session = MagicMock()
-        mock_sts = MagicMock()
-        mock_sts.get_caller_identity.return_value = {
-            "Account": "333344445555", "Arn": "arn:...", "UserId": "U",
-        }
-        mock_session.client.return_value = mock_sts
 
-        with patch(_BUILD_SESSION_PATCH, return_value=mock_session), \
+        with patch(_STS_PATCH, return_value=_sts_ok("333344445555")), \
              patch.dict(os.environ, {}, clear=True):
             os.environ.pop("AWS_PROFILE", None)
             ctx = resolve_aws_execution(ws)
@@ -461,24 +441,16 @@ class TestUnboundCompat:
         assert ctx.payer_account_id is None
         assert ctx.session_account_id == "333344445555"
 
-    def test_23_unbound_warning_printed_once_to_stderr(self, tmp_path, capsys):
-        """Unbound warning shown once to stderr."""
-        _reset_unbound_warning()
+    def test_23_unbound_warning_printed_once_per_invocation(self, tmp_path):
+        """Unbound warning is emitted by the CLI command, not by resolver."""
+        # The resolver no longer prints warnings — CLI does it per invocation.
+        # This test verifies the is_unbound flag is set for unbound workspaces.
         ws = _unbound_workspace(tmp_path)
-        mock_session = MagicMock()
-        mock_sts = MagicMock()
-        mock_sts.get_caller_identity.return_value = {
-            "Account": "111111111111", "Arn": "arn:...", "UserId": "U",
-        }
-        mock_session.client.return_value = mock_sts
 
-        with patch(_BUILD_SESSION_PATCH, return_value=mock_session):
-            resolve_aws_execution(ws)
-            resolve_aws_execution(ws)  # second call
+        with patch(_STS_PATCH, return_value=_sts_ok("111111111111")):
+            ctx = resolve_aws_execution(ws)
 
-        captured = capsys.readouterr()
-        # Warning should appear exactly once in stderr
-        assert captured.err.count("unbound default workspace") == 1
+        assert ctx.is_unbound is True
 
 
 # ---------------------------------------------------------------------------
@@ -513,11 +485,7 @@ class TestFailClosed:
              patch("kulshan.workspace.resolution.get_config_file_path", return_value=tmp_path / "c.toml"), \
              patch("kulshan.workspace.migration.get_legacy_history_path", return_value=tmp_path / "x.db"), \
              patch("kulshan.workspace.migration.get_legacy_security_history_path", return_value=tmp_path / "y.db"), \
-             patch(_STS_PATCH, return_value=_sts_ok("111122223333")), \
-             patch("kulshan.workspace.execution._build_session") as mock_build:
-            mock_build.return_value = MagicMock()
-            # We can't fully run the report (needs orchestrator etc) but we can
-            # test that the warning appears before failure
+             patch(_STS_PATCH, return_value=_sts_ok("111122223333")):
             result = runner.invoke(main, [
                 "--workspace", "customer-a", "report",
                 "--packs", "security", "--yes",
@@ -537,8 +505,7 @@ class TestRedactionInErrors:
     def test_25_credential_mismatch_contains_account_info(self, tmp_path):
         """Credential mismatch error includes account context."""
         ws = _bound_workspace(tmp_path)
-        with patch(_STS_PATCH, return_value=_sts_ok("999999999999")), \
-             patch(_BUILD_SESSION_PATCH, return_value=MagicMock()):
+        with patch(_STS_PATCH, return_value=_sts_ok("999999999999")):
             with pytest.raises(WorkspaceCredentialMismatchError) as exc:
                 resolve_aws_execution(ws)
         # Error includes expected and actual account

@@ -218,7 +218,7 @@ def workspace_create(
     """
     from datetime import datetime, timezone
 
-    from kulshan.workspace.sts import StsVerificationError, verify_credentials
+    from kulshan.workspace.sts import StsVerificationError, create_verified_session
 
     console = Console()
 
@@ -265,7 +265,7 @@ def workspace_create(
     # 6-10. STS verification (before creating any directory)
     console.print(f"  Verifying credentials for profile [cyan]{profile}[/cyan]...")
     try:
-        sts_result = verify_credentials(
+        sts_result = create_verified_session(
             profile=profile,
             role_arn=role_arn,
             credential_account=credential_account,
@@ -351,7 +351,7 @@ def connection_add(
         --name audit \\
         --profile customer-a-audit
     """
-    from kulshan.workspace.sts import StsVerificationError, verify_credentials
+    from kulshan.workspace.sts import StsVerificationError, create_verified_session
 
     console = Console()
 
@@ -409,7 +409,7 @@ def connection_add(
     # STS verification
     console.print(f"  Verifying credentials for profile [cyan]{profile}[/cyan]...")
     try:
-        sts_result = verify_credentials(
+        sts_result = create_verified_session(
             profile=profile,
             role_arn=role_arn,
             credential_account=credential_account,

@@ -282,8 +282,6 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
         if ext in ext_map:
             fmt = ext_map[ext]
 
-    session = create_session(profile=profile, role_arn=role_arn)
-
     # ── Workspace-aware execution context ────────────────────────────────
     from kulshan.workspace.resolution import resolve_workspace as _resolve_ws
     from kulshan.workspace.execution import resolve_aws_execution, AwsExecutionContext
@@ -315,8 +313,29 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
             console.print(f"[red]{e}[/red]")
             sys.exit(ExitCode.CONFIG_ERROR)
     else:
-        # Unbound default: use legacy session creation
-        pass  # session already created above
+        # Unbound default: use workspace execution resolver (backward-compatible)
+        try:
+            exec_ctx = resolve_aws_execution(
+                workspace=ws_ctx,
+                profile=profile,
+                role_arn=role_arn,
+            )
+            session = exec_ctx.session
+            account_id = exec_ctx.session_account_id
+        except (WorkspaceError, StsVerificationError) as e:
+            console.print(f"[red]{e}[/red]")
+            sys.exit(ExitCode.CONFIG_ERROR)
+        # Unbound warning (once per invocation)
+        console.print(
+            "[yellow]Warning:[/yellow] Using the unbound default workspace.",
+            highlight=False,
+        )
+        console.print(
+            "[dim]Runs from different AWS profiles may be stored together. "
+            "Create a bound workspace to isolate payer data.[/dim]",
+            highlight=False,
+        )
+        console.print()
 
     # ── Fail-closed: security pack history not yet workspace-isolated ─────
     if ws_ctx.is_bound and "security" in (selected_packs or []):
@@ -376,9 +395,6 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
             cur_s3_uri = preflight_result.cur_export.s3_uri
             console.print(f"    [green]→ CUR only mode (no CE API calls)[/green]")
         console.print()
-
-    if not ws_ctx.is_bound:
-        account_id = get_account_id(session)
 
     # ── Region selection ─────────────────────────────────────────────────
     if region_override:

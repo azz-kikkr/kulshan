@@ -10,7 +10,6 @@ share the same STS verification path.
 from __future__ import annotations
 
 import logging
-import sys
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -30,13 +29,12 @@ from kulshan.workspace.errors import (
 from kulshan.workspace.sts import (
     StsVerificationError,
     StsVerificationResult,
+    VerifiedAwsSession,
+    create_verified_session,
     verify_credentials,
 )
 
 logger = logging.getLogger(__name__)
-
-# Track whether unbound warning has been shown this process
-_unbound_warning_shown: bool = False
 
 
 @dataclass
@@ -49,6 +47,7 @@ class AwsExecutionContext:
     resolved_profile: str | None
     session_account_id: str
     payer_account_id: str | None
+    is_unbound: bool = False
 
 
 def resolve_aws_execution(
@@ -109,8 +108,6 @@ def _resolve_bound(
     show_pii: bool,
 ) -> AwsExecutionContext:
     """Resolve execution for a bound workspace."""
-    import boto3
-
     aws_config = workspace.config.aws
     assert aws_config is not None  # guaranteed by is_bound
 
@@ -153,42 +150,36 @@ def _resolve_bound(
 
     if role_arn:
         if connection.role_arn is None:
-            # Connection has no role, user supplied one — reject
             raise RoleArnConflictError(
                 workspace.name, connection.name, None, role_arn
             )
         if role_arn != connection.role_arn:
-            # Supplied role differs from configured — reject
             raise RoleArnConflictError(
                 workspace.name, connection.name, connection.role_arn, role_arn
             )
-        # Matches — allowed (effective_role already correct)
 
-    # --- Step 3: Create session and verify ---
-    sts_result = verify_credentials(
+    # --- Step 3: Create verified session (single call, no double-creation) ---
+    verified = create_verified_session(
         profile=connection.profile,
         role_arn=effective_role,
     )
 
     # --- Step 4: Validate account ---
-    if sts_result.account_id != connection.expected_session_account_id:
+    if verified.account_id != connection.expected_session_account_id:
         raise WorkspaceCredentialMismatchError(
             workspace_name=workspace.name,
             connection_name=connection.name,
             profile=connection.profile,
             expected_account=connection.expected_session_account_id,
-            actual_account=sts_result.account_id,
+            actual_account=verified.account_id,
         )
-
-    # Build the final session for use by commands
-    session = _build_session(connection.profile, effective_role)
 
     return AwsExecutionContext(
         workspace=workspace,
         connection=connection,
-        session=session,
+        session=verified.session,
         resolved_profile=connection.profile,
-        session_account_id=sts_result.account_id,
+        session_account_id=verified.account_id,
         payer_account_id=aws_config.payer_account_id,
     )
 
@@ -200,64 +191,27 @@ def _resolve_unbound(
 ) -> AwsExecutionContext:
     """Resolve execution for the unbound default workspace."""
     import os
-    import boto3
-
-    global _unbound_warning_shown
-    if not _unbound_warning_shown:
-        _unbound_warning_shown = True
-        print(
-            "Warning: Using the unbound default workspace.\n"
-            "\n"
-            "Runs from different AWS profiles may be stored together.\n"
-            "Create a bound workspace to isolate payer data.\n",
-            file=sys.stderr,
-        )
 
     # Use --profile, or AWS_PROFILE, or default chain
     effective_profile = profile or os.environ.get("AWS_PROFILE")
 
-    # Build session
-    session = _build_session(effective_profile, role_arn)
-
-    # Get account ID via STS
-    sts_client = session.client("sts")
-    identity = sts_client.get_caller_identity()
-    account_id = identity["Account"]
+    # Single verified session (no double creation)
+    verified = create_verified_session(
+        profile=effective_profile,
+        role_arn=role_arn,
+    )
 
     return AwsExecutionContext(
         workspace=workspace,
         connection=None,
-        session=session,
+        session=verified.session,
         resolved_profile=effective_profile,
-        session_account_id=account_id,
+        session_account_id=verified.account_id,
         payer_account_id=None,
+        is_unbound=True,
     )
 
 
-def _build_session(profile: str | None, role_arn: str | None) -> "boto3.Session":
-    """Build a boto3 session with optional role assumption."""
-    import boto3
-
-    kwargs = {}
-    if profile:
-        kwargs["profile_name"] = profile
-    session = boto3.Session(**kwargs)
-
-    if role_arn:
-        sts = session.client("sts")
-        creds = sts.assume_role(
-            RoleArn=role_arn, RoleSessionName="kulshan-exec"
-        )["Credentials"]
-        session = boto3.Session(
-            aws_access_key_id=creds["AccessKeyId"],
-            aws_secret_access_key=creds["SecretAccessKey"],
-            aws_session_token=creds["SessionToken"],
-        )
-
-    return session
-
-
 def _reset_unbound_warning() -> None:
-    """Reset unbound warning flag. For testing only."""
-    global _unbound_warning_shown
-    _unbound_warning_shown = False
+    """No-op kept for test compatibility. Warning is now per-invocation."""
+    pass
