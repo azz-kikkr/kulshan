@@ -474,6 +474,8 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
                     connections=conn_dicts,
                     regions=regions if 'regions' in dir() else ["us-east-1"],
                     selected_packs=selected_packs,
+                    payer_account_id=ws_ctx.payer_account_id,
+                    cost_connection_name=ws_ctx.config.aws.cost_connection if ws_ctx.config.aws else None,
                     quick=quick,
                     deep=deep,
                     days=days,
@@ -497,20 +499,38 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
             overall_score = consolidated.overall_score
             overall_grade = consolidated.overall_grade
             session = consolidated.successful_connections[0] if consolidated.successful_connections else None
-            account_id = consolidated.accounts_observed[0] if consolidated.accounts_observed else "unknown"
+            # For consolidated scans, use payer_account_id for display; account_id in DB is NULL
+            account_id = consolidated.payer_account_id or (
+                consolidated.accounts_observed[0] if consolidated.accounts_observed else "unknown"
+            )
             duration = consolidated.duration_seconds
 
             # Coverage summary
             status_label = consolidated.report_status.capitalize()
+            cost_coverage_label = {
+                "verified_payer_wide": "Verified payer-wide",
+                "account_scoped": "Account-scoped (not payer-wide)",
+                "unavailable": "Unavailable",
+                "cur_authoritative": "CUR authoritative",
+            }.get(consolidated.payer_cost_coverage, "Unknown")
             conn_names = ", ".join(c.connection_name for c in consolidated.successful_connections)
             accts = ", ".join(
                 redact_account_id(a) if not show_pii else a
                 for a in consolidated.accounts_observed
             )
             console.print(f"  Report status: [bold]{status_label}[/bold]")
+            console.print(f"  Payer cost coverage: {cost_coverage_label}")
             console.print(f"  Connections: {conn_names}")
             console.print(f"  Accounts verified: {accts}")
             console.print()
+
+            if consolidated.payer_cost_coverage == "unavailable" and "cost" in selected_packs:
+                console.print(
+                    "  [dim]No payer-wide cost authority available. "
+                    "Supply verified CUR for payer-wide cost evidence.[/dim]",
+                    highlight=False,
+                )
+                console.print()
 
             if consolidated.failed_connections:
                 for fc in consolidated.failed_connections:
@@ -524,37 +544,37 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
                 )
                 console.print()
 
-            # Save history
+            # Save history atomically
             if not no_history:
                 try:
                     from kulshan.history import HistoryStore
                     history = HistoryStore(ws_ctx.history_db_path)
                     history.purge_old(retention_days=365)
-                    scan_id = history.save_scan(
-                        account_id=account_id,
+                    scan_id = history.save_consolidated_scan(
                         regions=regions if 'regions' in dir() else [],
                         duration_seconds=duration,
                         overall_score=overall_score,
                         overall_grade=overall_grade,
                         results=results,
                         findings=all_findings,
-                        version=__version__,
                         report_status=consolidated.report_status,
+                        payer_account_id=consolidated.payer_account_id,
+                        connections=[
+                            {
+                                "connection_name": ce.connection_name,
+                                "profile": ce.profile,
+                                "session_account_id": ce.session_account_id,
+                                "role_arn": ce.role_arn,
+                                "status": ce.status,
+                                "duration_seconds": ce.duration_seconds,
+                                "packs_attempted": ce.packs_attempted,
+                                "packs_completed": ce.packs_completed,
+                                "error_code": ce.error_code,
+                            }
+                            for ce in consolidated.connections_executed
+                        ],
+                        version=__version__,
                     )
-                    history.save_scan_connections(scan_id, [
-                        {
-                            "connection_name": ce.connection_name,
-                            "profile": ce.profile,
-                            "session_account_id": ce.session_account_id,
-                            "role_arn": ce.role_arn,
-                            "status": ce.status,
-                            "duration_seconds": ce.duration_seconds,
-                            "packs_attempted": ce.packs_attempted,
-                            "packs_completed": ce.packs_completed,
-                            "error_code": ce.error_code,
-                        }
-                        for ce in consolidated.connections_executed
-                    ])
                     history.close()
                 except Exception:
                     pass
@@ -564,9 +584,19 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
             top_actions = process_findings(all_findings)[:10] if all_findings else []
             scan_metadata = {
                 "report_status": consolidated.report_status,
-                "connections": len(consolidated.successful_connections),
+                "payer_cost_coverage": consolidated.payer_cost_coverage,
+                "connections": [
+                    {
+                        "name": ce.connection_name,
+                        "account_id": ce.session_account_id,
+                        "status": ce.status,
+                    }
+                    for ce in consolidated.connections_executed
+                ],
                 "total_connections": len(consolidated.connections_executed),
+                "successful_connections": len(consolidated.successful_connections),
                 "payer_connection": consolidated.payer_connection,
+                "payer_account_id": consolidated.payer_account_id,
             }
 
             _emit_output(

@@ -80,6 +80,7 @@ class WorkspaceAwsConfig:
     connections: list[AwsConnection] = field(default_factory=list)
     payer_binding_source: str | None = None
     payer_bound_at: str | None = None
+    cost_connection: str | None = None
 
     def __post_init__(self):
         if self.payer_account_id is not None:
@@ -142,6 +143,8 @@ class WorkspaceAwsConfig:
             d["payer_binding_source"] = self.payer_binding_source
         if self.payer_bound_at is not None:
             d["payer_bound_at"] = self.payer_bound_at
+        if self.cost_connection is not None:
+            d["cost_connection"] = self.cost_connection
         return d
 
     @classmethod
@@ -158,6 +161,7 @@ class WorkspaceAwsConfig:
                 connections=connections,
                 payer_binding_source=data.get("payer_binding_source"),
                 payer_bound_at=data.get("payer_bound_at"),
+                cost_connection=data.get("cost_connection"),
             )
         except WorkspaceConfigError:
             raise

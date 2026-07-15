@@ -4,12 +4,14 @@ Runs packs across multiple approved AWS connections in a payer workspace,
 deduplicates findings, and produces one coherent report.
 
 Key rules:
-- Payer-scoped packs (cost) run from ONE connection only.
+- Cost pack runs ONLY from the authoritative cost connection (payer account
+  or explicitly configured cost_connection). Never from an arbitrary member.
 - Account-scoped packs run from each connection.
-- Findings are deduplicated by fingerprint.
+- Findings are deduplicated by composite key (fingerprint + account_id).
 - Duplicate cost totals are never summed.
 - One parent scan is saved to canonical history.
-- Connection execution metadata is stored separately.
+- Connection execution metadata is stored separately in one transaction.
+- Payer cost coverage is tracked separately from report operational status.
 """
 from __future__ import annotations
 
@@ -23,14 +25,14 @@ from kulshan.workspace.sts import create_verified_session, StsVerificationError
 
 logger = logging.getLogger(__name__)
 
-# Packs that produce payer-wide data (Cost Explorer returns consolidated billing).
-# These run from ONE connection only to avoid double-counting.
+# Packs that require payer-account authority to produce payer-wide data.
 PAYER_SCOPED_PACKS = frozenset({"cost"})
 
 # All other packs are account-scoped.
 ACCOUNT_SCOPED_PACKS = frozenset({"security", "sweep", "dr", "age", "drift", "tag", "pulse", "limit", "topo"})
 
 ReportStatus = Literal["complete", "partial", "failed"]
+PayerCostCoverage = Literal["verified_payer_wide", "account_scoped", "unavailable", "cur_authoritative"]
 
 
 @dataclass
@@ -57,10 +59,12 @@ class ConsolidatedResult:
     overall_score: int
     overall_grade: str
     report_status: ReportStatus
+    payer_cost_coverage: PayerCostCoverage
     connections_executed: list[ConnectionExecution]
     accounts_observed: list[str]
     duration_seconds: float
     payer_connection: str | None = None
+    payer_account_id: str | None = None
 
     @property
     def successful_connections(self) -> list[ConnectionExecution]:
@@ -71,11 +75,52 @@ class ConsolidatedResult:
         return [c for c in self.connections_executed if c.status == "failed"]
 
 
+def resolve_cost_authority(
+    connections: list[dict],
+    payer_account_id: str | None,
+    cost_connection_name: str | None,
+) -> dict | None:
+    """Determine which connection has authority for payer-wide cost data.
+
+    Selection order:
+    1. Explicitly configured cost_connection.
+    2. A connection whose expected_session_account_id == payer_account_id.
+    3. None — no payer-wide cost authority available.
+
+    An arbitrary member account connection is NEVER selected.
+
+    Args:
+        connections: List of connection config dicts.
+        payer_account_id: Verified payer account (may be None).
+        cost_connection_name: Explicit cost_connection config (may be None).
+
+    Returns:
+        The authoritative connection dict, or None.
+    """
+    # 1. Explicit cost_connection
+    if cost_connection_name:
+        for conn in connections:
+            if conn["name"] == cost_connection_name:
+                return conn
+        logger.warning("Configured cost_connection '%s' not found.", cost_connection_name)
+
+    # 2. Connection matching payer account
+    if payer_account_id:
+        for conn in connections:
+            if conn["expected_session_account_id"] == payer_account_id:
+                return conn
+
+    # 3. No authority
+    return None
+
+
 def run_consolidated_report(
     connections: list[dict],
     regions: list[str],
     selected_packs: list[str],
     *,
+    payer_account_id: str | None = None,
+    cost_connection_name: str | None = None,
     quick: bool = False,
     deep: bool = False,
     days: int = 90,
@@ -93,6 +138,8 @@ def run_consolidated_report(
         connections: List of connection configs.
         regions: AWS regions to scan.
         selected_packs: Packs to run.
+        payer_account_id: Verified payer account ID (for cost authority).
+        cost_connection_name: Explicit cost authority connection name.
         quick: Skip confirmations.
         deep: Run expensive checks.
         days: Cost analysis lookback.
@@ -108,17 +155,20 @@ def run_consolidated_report(
 
     start_time = time.time()
     connection_executions: list[ConnectionExecution] = []
-    all_pack_results: Dict[str, list[dict]] = {}  # pack -> [result_per_connection]
+    all_pack_results: Dict[str, list[dict]] = {}
     all_findings_raw: list[dict] = []
     accounts_observed: set[str] = set()
-    payer_connection_name: str | None = None
+    payer_connection_used: str | None = None
+    payer_cost_coverage: PayerCostCoverage = "unavailable"
 
-    # Separate packs into payer-scoped and account-scoped
+    # Determine cost authority
     payer_packs = [p for p in selected_packs if p in PAYER_SCOPED_PACKS]
     account_packs = [p for p in selected_packs if p in ACCOUNT_SCOPED_PACKS]
 
-    # Track whether payer-scoped packs have been run
-    payer_packs_done = False
+    cost_authority = resolve_cost_authority(
+        connections, payer_account_id, cost_connection_name
+    )
+
     default_conn = connections[0] if connections else None
 
     for conn in connections:
@@ -138,32 +188,20 @@ def run_consolidated_report(
                 role_arn=role_arn,
             )
         except StsVerificationError as e:
-            # Default connection failure = abort
             if conn == default_conn:
                 exec_meta = ConnectionExecution(
-                    connection_name=conn_name,
-                    profile=profile,
-                    session_account_id=None,
-                    role_arn=role_arn,
-                    status="failed",
-                    duration_seconds=time.time() - conn_start,
-                    packs_attempted=[],
-                    packs_completed=[],
+                    connection_name=conn_name, profile=profile,
+                    session_account_id=None, role_arn=role_arn,
+                    status="failed", duration_seconds=time.time() - conn_start,
                     error_code="sts_verification_failed",
                 )
                 connection_executions.append(exec_meta)
                 raise DefaultConnectionFailedError(conn_name, str(e)) from e
 
-            # Secondary connection failure = continue partial
             exec_meta = ConnectionExecution(
-                connection_name=conn_name,
-                profile=profile,
-                session_account_id=None,
-                role_arn=role_arn,
-                status="failed",
-                duration_seconds=time.time() - conn_start,
-                packs_attempted=[],
-                packs_completed=[],
+                connection_name=conn_name, profile=profile,
+                session_account_id=None, role_arn=role_arn,
+                status="failed", duration_seconds=time.time() - conn_start,
                 error_code="sts_verification_failed",
             )
             connection_executions.append(exec_meta)
@@ -173,14 +211,9 @@ def run_consolidated_report(
         # Credential mismatch check
         if verified.account_id != expected_account:
             exec_meta = ConnectionExecution(
-                connection_name=conn_name,
-                profile=profile,
-                session_account_id=verified.account_id,
-                role_arn=role_arn,
-                status="failed",
-                duration_seconds=time.time() - conn_start,
-                packs_attempted=[],
-                packs_completed=[],
+                connection_name=conn_name, profile=profile,
+                session_account_id=verified.account_id, role_arn=role_arn,
+                status="failed", duration_seconds=time.time() - conn_start,
                 error_code="credential_mismatch",
             )
             connection_executions.append(exec_meta)
@@ -190,75 +223,49 @@ def run_consolidated_report(
                     conn_name,
                     f"Credential mismatch: expected {expected_account}, got {verified.account_id}",
                 )
-            logger.warning(
-                "Connection '%s' credential mismatch (expected %s, got %s), skipping",
-                conn_name, expected_account, verified.account_id,
-            )
             continue
 
         session = verified.session
         accounts_observed.add(verified.account_id)
 
         # Determine which packs this connection should run
-        conn_packs: list[str] = []
+        conn_packs: list[str] = list(account_packs)
 
-        # Payer-scoped packs: run only from first successful connection
-        if not payer_packs_done and payer_packs:
-            conn_packs.extend(payer_packs)
-            payer_connection_name = conn_name
-
-        # Account-scoped packs: run from every connection
-        conn_packs.extend(account_packs)
+        # Payer-scoped packs: ONLY from authoritative cost connection
+        if conn == cost_authority and payer_packs:
+            conn_packs = payer_packs + conn_packs
+            payer_connection_used = conn_name
 
         if not conn_packs:
             exec_meta = ConnectionExecution(
-                connection_name=conn_name,
-                profile=profile,
-                session_account_id=verified.account_id,
-                role_arn=role_arn,
-                status="success",
-                duration_seconds=time.time() - conn_start,
-                packs_attempted=[],
-                packs_completed=[],
+                connection_name=conn_name, profile=profile,
+                session_account_id=verified.account_id, role_arn=role_arn,
+                status="success", duration_seconds=time.time() - conn_start,
             )
             connection_executions.append(exec_meta)
             continue
 
         packs_attempted = list(conn_packs)
 
-        # Run packs for this connection
+        # Run packs
         try:
             results = run_all_scans(
-                session,
-                regions,
-                profile=profile,
-                quick=quick,
-                console=console,
-                selected_packs=conn_packs,
-                deep=deep,
-                days=days,
+                session, regions, profile=profile,
+                quick=quick, console=console,
+                selected_packs=conn_packs, deep=deep, days=days,
             )
         except Exception as e:
             exec_meta = ConnectionExecution(
-                connection_name=conn_name,
-                profile=profile,
-                session_account_id=verified.account_id,
-                role_arn=role_arn,
-                status="failed",
-                duration_seconds=time.time() - conn_start,
+                connection_name=conn_name, profile=profile,
+                session_account_id=verified.account_id, role_arn=role_arn,
+                status="failed", duration_seconds=time.time() - conn_start,
                 packs_attempted=packs_attempted,
-                packs_completed=[],
                 error_code=f"scan_error: {type(e).__name__}",
             )
             connection_executions.append(exec_meta)
-
             if conn == default_conn:
                 raise DefaultConnectionFailedError(conn_name, str(e)) from e
             continue
-
-        # Mark payer packs as done after first success
-        if not payer_packs_done and payer_packs:
-            payer_packs_done = True
 
         # Collect results
         for pack_name, pack_result in results.items():
@@ -266,23 +273,21 @@ def run_consolidated_report(
                 all_pack_results[pack_name] = []
             all_pack_results[pack_name].append(pack_result)
 
-            # Tag findings with source connection
             for finding in pack_result.get("findings", []):
                 finding["_source_connections"] = [conn_name]
+                # Ensure account_id is tagged for deduplication
+                if "account_id" not in finding or not finding["account_id"]:
+                    finding["account_id"] = verified.account_id
                 all_findings_raw.append(finding)
 
             if not pack_result.get("skipped"):
                 packs_completed.append(pack_name)
 
         exec_meta = ConnectionExecution(
-            connection_name=conn_name,
-            profile=profile,
-            session_account_id=verified.account_id,
-            role_arn=role_arn,
-            status="success",
-            duration_seconds=time.time() - conn_start,
-            packs_attempted=packs_attempted,
-            packs_completed=packs_completed,
+            connection_name=conn_name, profile=profile,
+            session_account_id=verified.account_id, role_arn=role_arn,
+            status="success", duration_seconds=time.time() - conn_start,
+            packs_attempted=packs_attempted, packs_completed=packs_completed,
         )
         connection_executions.append(exec_meta)
 
@@ -293,17 +298,26 @@ def run_consolidated_report(
             [c.connection_name for c in connection_executions]
         )
 
-    # Merge pack results (use first non-skipped result per pack for scores)
+    # Determine payer cost coverage
+    if payer_connection_used:
+        payer_cost_coverage = "verified_payer_wide"
+    elif payer_packs and any(
+        p in all_pack_results for p in payer_packs
+    ):
+        # Cost ran but not from payer authority — label as account_scoped
+        payer_cost_coverage = "account_scoped"
+    elif payer_packs:
+        payer_cost_coverage = "unavailable"
+
+    # Merge pack results
     merged_results: Dict[str, dict] = {}
     for pack_name, result_list in all_pack_results.items():
-        # For payer-scoped packs: single result
         if pack_name in PAYER_SCOPED_PACKS:
             merged_results[pack_name] = result_list[0] if result_list else {}
         else:
-            # Account-scoped: merge findings, take best scores
             merged_results[pack_name] = _merge_pack_results(result_list)
 
-    # Deduplicate findings
+    # Deduplicate findings (account-aware)
     deduped_findings = deduplicate_findings(all_findings_raw)
 
     # Compute overall score
@@ -327,22 +341,20 @@ def run_consolidated_report(
         overall_score=overall_score,
         overall_grade=overall_grade,
         report_status=report_status,
+        payer_cost_coverage=payer_cost_coverage,
         connections_executed=connection_executions,
         accounts_observed=sorted(accounts_observed),
         duration_seconds=duration,
-        payer_connection=payer_connection_name,
+        payer_connection=payer_connection_used,
+        payer_account_id=payer_account_id,
     )
 
 
 def _merge_pack_results(result_list: list[dict]) -> dict:
-    """Merge multiple account-scoped results for the same pack.
-
-    Combines findings lists, takes the best (non-skipped) scores.
-    """
+    """Merge multiple account-scoped results for the same pack."""
     if not result_list:
         return {}
 
-    # Start with first non-skipped result as base
     base = None
     for r in result_list:
         if not r.get("skipped"):
@@ -351,13 +363,11 @@ def _merge_pack_results(result_list: list[dict]) -> dict:
     if base is None:
         base = dict(result_list[0])
 
-    # Merge findings from all results
     all_findings = []
     for r in result_list:
         all_findings.extend(r.get("findings", []))
     base["findings"] = all_findings
 
-    # Update finding count in scores
     if "scores" in base:
         base["scores"]["total_findings"] = len(all_findings)
 
@@ -365,12 +375,17 @@ def _merge_pack_results(result_list: list[dict]) -> dict:
 
 
 def deduplicate_findings(findings: list[dict]) -> list[dict]:
-    """Deduplicate findings by fingerprint.
+    """Deduplicate findings by composite key: fingerprint + account_id.
+
+    The same finding type on two different accounts MUST remain two
+    separate findings. Only identical resource evidence seen through
+    multiple connections (same account, same fingerprint) deduplicates.
 
     Rules:
-    - Keep one finding per fingerprint.
+    - Composite key = fingerprint + account_id.
+    - Same key from multiple connections → one finding.
     - Prefer the higher-confidence record.
-    - Retain all contributing connection names in _source_connections.
+    - Retain all contributing connection names.
     - Never sum duplicate cost totals.
 
     Args:
@@ -379,18 +394,23 @@ def deduplicate_findings(findings: list[dict]) -> list[dict]:
     Returns:
         Deduplicated findings list.
     """
-    seen: Dict[str, dict] = {}  # fingerprint -> best finding
+    seen: Dict[str, dict] = {}  # composite_key -> best finding
 
     for finding in findings:
         fp = finding.get("fingerprint", "")
-        if not fp:
-            # No fingerprint — keep as unique
-            fp = finding.get("id", id(finding))
+        account = finding.get("account_id", "")
 
-        if fp not in seen:
-            seen[fp] = finding
+        if not fp:
+            # No fingerprint — treat as unique
+            key = str(id(finding))
         else:
-            existing = seen[fp]
+            # Composite key includes account so different accounts stay separate
+            key = f"{fp}|{account}"
+
+        if key not in seen:
+            seen[key] = finding
+        else:
+            existing = seen[key]
             # Merge source connections
             existing_sources = existing.get("_source_connections", [])
             new_sources = finding.get("_source_connections", [])
@@ -401,9 +421,8 @@ def deduplicate_findings(findings: list[dict]) -> list[dict]:
             existing_conf = existing.get("confidence", 0)
             new_conf = finding.get("confidence", 0)
             if new_conf > existing_conf:
-                # Replace with higher-confidence finding but keep merged sources
                 finding["_source_connections"] = merged_sources
-                seen[fp] = finding
+                seen[key] = finding
 
     return list(seen.values())
 

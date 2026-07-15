@@ -47,7 +47,8 @@ CREATE TABLE IF NOT EXISTS scans (
     pack_scores TEXT,
     kulshan_version TEXT,
     full_result_json TEXT,
-    report_status TEXT DEFAULT 'complete'
+    report_status TEXT DEFAULT 'complete',
+    payer_account_id TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_scans_timestamp ON scans(timestamp);
@@ -131,6 +132,15 @@ class HistoryStore:
                 conn.commit()
             except sqlite3.OperationalError:
                 pass
+        # Add payer_account_id column
+        try:
+            conn.execute("SELECT payer_account_id FROM scans LIMIT 0")
+        except sqlite3.OperationalError:
+            try:
+                conn.execute("ALTER TABLE scans ADD COLUMN payer_account_id TEXT")
+                conn.commit()
+            except sqlite3.OperationalError:
+                pass
         # Create scan_connections table
         conn.executescript(_MIGRATION_TABLE_SQL)
 
@@ -141,7 +151,7 @@ class HistoryStore:
 
     def save_scan(
         self,
-        account_id: str,
+        account_id: str | None,
         regions: list[str],
         duration_seconds: float,
         overall_score: int,
@@ -151,6 +161,7 @@ class HistoryStore:
         version: str = "",
         store_full_result: bool = False,
         report_status: str = "complete",
+        payer_account_id: str | None = None,
     ) -> str:
         """Save a scan result to history. Returns the scan ID."""
         conn = self._connect()
@@ -187,14 +198,15 @@ class HistoryStore:
             """INSERT INTO scans (id, timestamp, account_id, regions, duration_seconds,
                overall_score, overall_grade, total_findings, critical_findings,
                high_findings, medium_findings, low_findings, pack_scores,
-               kulshan_version, full_result_json, report_status)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               kulshan_version, full_result_json, report_status, payer_account_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 scan_id, now, account_id, json.dumps(regions), duration_seconds,
                 overall_score, overall_grade, len(findings),
                 severity_counts["critical"], severity_counts["high"],
                 severity_counts["medium"], severity_counts["low"],
                 json.dumps(pack_scores), version, full_json, report_status,
+                payer_account_id,
             ),
         )
         conn.commit()
@@ -210,9 +222,6 @@ class HistoryStore:
         Args:
             scan_id: The parent scan ID.
             connections: List of dicts with connection execution metadata.
-                Each must have: connection_name, status.
-                Optional: profile, session_account_id, role_arn,
-                          duration_seconds, packs_attempted, packs_completed, error_code.
         """
         conn = self._connect()
         for c in connections:
@@ -237,17 +246,128 @@ class HistoryStore:
             )
         conn.commit()
 
+    def save_consolidated_scan(
+        self,
+        regions: list[str],
+        duration_seconds: float,
+        overall_score: int,
+        overall_grade: str,
+        results: dict[str, Any],
+        findings: list[dict],
+        report_status: str,
+        payer_account_id: str | None,
+        connections: list[dict],
+        version: str = "",
+    ) -> str:
+        """Save a consolidated scan and its connection metadata atomically.
+
+        Parent scan row and all scan_connections rows are committed in a
+        single transaction. If any part fails, everything rolls back.
+
+        Args:
+            regions: AWS regions scanned.
+            duration_seconds: Total duration.
+            overall_score: Computed overall score.
+            overall_grade: Computed grade.
+            results: Pack results dict.
+            findings: Deduplicated findings.
+            report_status: 'complete', 'partial', or 'failed'.
+            payer_account_id: Verified payer account (may be None).
+            connections: List of connection execution metadata dicts.
+            version: Kulshan version.
+
+        Returns:
+            The parent scan ID.
+
+        Raises:
+            Exception: If persistence fails (transaction rolled back).
+        """
+        conn = self._connect()
+        scan_id = str(uuid.uuid4())[:8]
+        now = datetime.now(timezone.utc).isoformat()
+
+        severity_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+        for f in findings:
+            sev = f.get("severity", "info")
+            if sev in severity_counts:
+                severity_counts[sev] += 1
+
+        pack_scores = {}
+        for key, result in results.items():
+            scores = result.get("scores", {})
+            pack_scores[key] = {
+                "score": scores.get("overall_score", 0),
+                "grade": scores.get("grade", "?"),
+                "findings": scores.get("total_findings", 0),
+            }
+
+        try:
+            # Parent scan — account_id is NULL for consolidated scans
+            conn.execute(
+                """INSERT INTO scans (id, timestamp, account_id, regions, duration_seconds,
+                   overall_score, overall_grade, total_findings, critical_findings,
+                   high_findings, medium_findings, low_findings, pack_scores,
+                   kulshan_version, full_result_json, report_status, payer_account_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    scan_id, now, None, json.dumps(regions), duration_seconds,
+                    overall_score, overall_grade, len(findings),
+                    severity_counts["critical"], severity_counts["high"],
+                    severity_counts["medium"], severity_counts["low"],
+                    json.dumps(pack_scores), version, None, report_status,
+                    payer_account_id,
+                ),
+            )
+
+            # Connection metadata
+            for c in connections:
+                conn.execute(
+                    """INSERT INTO scan_connections
+                       (scan_id, connection_name, profile, session_account_id,
+                        role_arn, status, duration_seconds, packs_attempted,
+                        packs_completed, error_code)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        scan_id,
+                        c.get("connection_name", ""),
+                        c.get("profile"),
+                        c.get("session_account_id"),
+                        c.get("role_arn"),
+                        c.get("status", "unknown"),
+                        c.get("duration_seconds"),
+                        json.dumps(c.get("packs_attempted", [])),
+                        json.dumps(c.get("packs_completed", [])),
+                        c.get("error_code"),
+                    ),
+                )
+
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+
+        return scan_id
+
     def list_scans(
         self, limit: int = 20, account_id: str | None = None
     ) -> list[dict[str, Any]]:
-        """List recent scans, newest first."""
+        """List recent scans, newest first.
+
+        For --account filtering, matches both:
+        - scans.account_id (single-connection scans)
+        - scan_connections.session_account_id (consolidated scans)
+        """
         conn = self._connect()
         if account_id:
             rows = conn.execute(
-                "SELECT id, timestamp, account_id, overall_score, overall_grade, "
-                "total_findings, critical_findings, high_findings, duration_seconds "
-                "FROM scans WHERE account_id = ? ORDER BY timestamp DESC LIMIT ?",
-                (account_id, limit),
+                "SELECT DISTINCT s.id, s.timestamp, s.account_id, s.overall_score, "
+                "s.overall_grade, s.total_findings, s.critical_findings, "
+                "s.high_findings, s.duration_seconds "
+                "FROM scans s "
+                "LEFT JOIN scan_connections sc ON s.id = sc.scan_id "
+                "WHERE s.account_id = ? OR sc.session_account_id = ? "
+                "ORDER BY s.timestamp DESC LIMIT ?",
+                (account_id, account_id, limit),
             ).fetchall()
         else:
             rows = conn.execute(
