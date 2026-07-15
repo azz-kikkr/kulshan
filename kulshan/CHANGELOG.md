@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-15
+
+### Added
+- **Automatic AWS environment onboarding**: `aws login` then `kulshan report` automatically creates an isolated local environment using the verified STS identity. No manual workspace setup required.
+- **Identity-based routing**: Kulshan identifies the active AWS principal via `GetCallerIdentity`, canonicalizes assumed-role ARNs (strips volatile session names), and routes to the correct local database automatically.
+- **CUR payer binding**: When local CUR data contains a valid `bill_payer_account_id`, Kulshan automatically binds the environment to that payer. Mismatched or multiple payers are rejected.
+- **Payer environment reconciliation**: `kulshan workspace reconcile` detects when multiple AWS identities access the same payer account and offers to link them into one environment. Never merges automatically.
+- **Federated history**: `kulshan history` now includes read-only scans from linked (superseded) workspaces, showing a unified timeline per payer environment.
+- **`--direct-only` flag**: `kulshan history --direct-only` shows only scans stored directly in the current workspace.
+- **Consolidated payer reports**: When a workspace has multiple approved connections, `kulshan report` produces one report across all connections with deduplicated findings and per-connection coverage metadata.
+- **Cost authority selection**: Payer-wide Cost Explorer data is only sourced from a connection whose account matches the verified payer, or an explicitly configured `cost_connection`. Arbitrary member accounts are never labeled payer-wide.
+- **`kulshan workspace rename`**: Change display names without affecting the internal workspace ID or database path.
+- **`scan_connections` table**: Per-connection execution metadata (account, status, duration, packs, errors) stored alongside the parent scan.
+- **`scans.payer_account_id` column**: Consolidated scans store the verified payer separately from credential accounts.
+- **Atomic consolidated persistence**: Parent scan and all connection metadata commit in one SQLite transaction; failure rolls back everything.
+
+### Changed
+- **Default UX**: Authenticated users are now auto-onboarded into isolated environments. The unbound-default-with-warning path is eliminated for users with valid AWS credentials.
+- **Identity key**: Workspace identity is based on STS account + canonical principal ARN (v2), not profile name. Profile-based v1 keys still work for backward compatibility.
+- **`payer_account_id` is now optional**: Auto-created workspaces start with `payer_account_id = null` until CUR evidence binds them. The STS account is no longer assumed to be the payer.
+- **`history --account` filtering**: Now matches consolidated scans via `scan_connections.session_account_id` in addition to `scans.account_id`.
+- **Display names derived from ARN**: e.g. `readonlyrole-cedar`, `billingaudit-river`, `alice-oak`.
+- **Finding deduplication**: Composite key is now `fingerprint + account_id`. Same finding type on different accounts remains separate; same resource seen through two connections deduplicates to one.
+
+### Fixed
+- Assumed-role ARNs with volatile session names no longer create a new workspace on every login.
+- Old raw-ARN registry entries are automatically migrated to canonical keys on first lookup.
+
+### Upgrade Notes
+- **Existing workspaces are preserved**: Default and manually created workspaces continue to work unchanged.
+- **Schema migration is automatic**: New columns (`report_status`, `payer_account_id`) and `scan_connections` table are added on first database open. Non-destructive.
+- **Registry gains v2 keys**: The identity registry now stores both v1 (profile-based) and v2 (identity-based) keys. Existing v1 entries are still used for lookup.
+- **Behavioral change**: Running `kulshan report` without `--workspace` now auto-onboards if AWS credentials are available, instead of showing the unbound-workspace warning. Use `--workspace default` to force legacy behavior.
+
 ## [0.2.3] - 2026-07-13
 
 ### Fixed

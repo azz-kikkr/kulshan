@@ -61,18 +61,102 @@ Requires Python 3.9+. macOS, Linux, Windows.
 
 Kulshan uses your existing AWS CLI credentials. If `aws sts get-caller-identity` works, Kulshan works.
 
+The recommended flow is:
+
 ```bash
-# SSO
-aws sso login --profile your-profile
+aws login
+kulshan report
+```
+
+Kulshan identifies your active AWS identity automatically and routes to the correct local database.
+
+Named profiles and explicit credentials also work:
+
+```bash
+# Named profile
 kulshan --profile your-profile report
 
-# Environment variables
-export AWS_ACCESS_KEY_ID=AKIA...
-export AWS_SECRET_ACCESS_KEY=...
-kulshan report
+# Environment variable
+AWS_PROFILE=customer-a kulshan report
 
 # Assume role
 kulshan --role-arn arn:aws:iam::123456789012:role/KulshanAudit report
+```
+
+---
+
+## Multi-Environment Isolation
+
+Kulshan automatically separates data for different AWS identities.
+
+On first use, Kulshan creates a local environment named after your AWS role or user:
+
+```text
+✓ Created environment readonlyrole-cedar
+  Using readonlyrole-cedar · account 1234…5678
+```
+
+Future runs with the same identity reuse the same environment and database. Different identities get separate environments automatically.
+
+No `--workspace` flags or manual setup required.
+
+### Payer Binding
+
+When Kulshan reads CUR data containing a `bill_payer_account_id`, it binds the environment to that payer:
+
+```text
+✓ Bound this environment to payer XXXX-XXXX-9999 using CUR evidence.
+```
+
+### Reconciliation
+
+If multiple AWS identities access the same payer account, Kulshan offers to link them:
+
+```bash
+kulshan workspace reconcile
+```
+
+After linking, all identities route to one payer environment, and `kulshan history` shows a unified timeline.
+
+### Workspace Commands
+
+```bash
+kulshan workspace list                    # Show all environments
+kulshan workspace show                    # Show current environment details
+kulshan workspace rename ws_abc "Acme"    # Change display name
+kulshan workspace reconcile               # Link shared-payer environments
+kulshan workspace use ws_abc              # Set active workspace
+```
+
+### History
+
+```bash
+kulshan history                    # Show scans (including linked environments)
+kulshan history --direct-only      # Only scans from this workspace
+kulshan history --account 123456789012   # Filter by credential account
+```
+
+### Consolidated Reports
+
+When a payer environment has multiple approved connections:
+
+```bash
+kulshan report     # Runs all approved connections, produces one report
+```
+
+The report shows coverage and source attribution:
+
+```text
+Report status: Complete
+Payer cost coverage: Verified payer-wide
+Connections: billing, audit
+Accounts verified: XXXX-XXXX-1111, XXXX-XXXX-2222
+```
+
+To run a single connection:
+
+```bash
+kulshan --connection audit report
 ```
 
 ---
