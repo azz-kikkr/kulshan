@@ -44,6 +44,55 @@ _HMAC_KEY = b"kulshan-workspace-id-v1"
 _HMAC_KEY_V2 = b"kulshan-workspace-id-v2"
 
 
+def canonicalize_arn(arn: str) -> str:
+    """Normalize an STS ARN to a stable canonical form.
+
+    Assumed-role ARNs contain a volatile session name that changes
+    between logins. This function strips the session name and converts
+    to the stable IAM role ARN.
+
+    Examples:
+        arn:aws:sts::123:assumed-role/ReadOnlyRole/session-123
+          → arn:aws:iam::123:role/ReadOnlyRole
+
+        arn:aws:sts::123:assumed-role/team/finops/ReadOnlyRole/session-123
+          → arn:aws:iam::123:role/team/finops/ReadOnlyRole
+
+        arn:aws:iam::123:user/alice  → unchanged
+        arn:aws:iam::123:root        → unchanged
+
+    Args:
+        arn: Raw ARN from STS GetCallerIdentity.
+
+    Returns:
+        Canonical ARN suitable for stable identity hashing.
+    """
+    if not arn:
+        return arn
+
+    # Split into arn:partition:service:region:account:resource
+    parts = arn.split(":")
+    if len(parts) < 6:
+        return arn
+
+    partition = parts[1]
+    service = parts[2]
+    account = parts[4]
+    resource = ":".join(parts[5:])  # rejoin in case resource has colons
+
+    # Only assumed-role ARNs need normalization
+    if service == "sts" and resource.startswith("assumed-role/"):
+        # assumed-role/[path/]RoleName/SessionName
+        # Strip the last segment (session name)
+        segments = resource.split("/")
+        # segments[0] = "assumed-role", segments[1:-1] = role path + name, segments[-1] = session
+        if len(segments) >= 3:
+            role_path = "/".join(segments[1:-1])  # everything between assumed-role/ and session
+            return f"arn:{partition}:iam::{account}:role/{role_path}"
+
+    return arn
+
+
 @dataclass
 class RegistryEntry:
     """A single identity-to-workspace mapping."""
@@ -114,18 +163,18 @@ def compute_identity_key_v2(
 ) -> str:
     """Compute the v2 identity key based on verified STS identity.
 
-    The v2 key uses account_id + ARN (the actual AWS identity) rather
-    than the profile name. This supports the `aws login` workflow where
-    no meaningful profile name exists.
+    The v2 key uses account_id + canonical ARN (the stable AWS identity).
+    The ARN is canonicalized to remove volatile session names.
 
     Args:
         account_id: Verified STS account ID (12 digits).
-        arn: Verified STS ARN (from GetCallerIdentity).
+        arn: Verified STS ARN (raw — will be canonicalized internally).
 
     Returns:
-        Hex string (first 16 chars of HMAC-SHA256 digest), prefixed with "v2_".
+        Hex string prefixed with "v2_" (16 chars total).
     """
-    message = f"{account_id}\n{arn}".encode("utf-8")
+    canonical = canonicalize_arn(arn)
+    message = f"{account_id}\n{canonical}".encode("utf-8")
     digest = hmac.new(_HMAC_KEY_V2, message, hashlib.sha256).hexdigest()
     return f"v2_{digest[:13]}"
 
@@ -157,20 +206,20 @@ def compute_workspace_dir_name_v2(
 ) -> str:
     """Generate the stable workspace directory name from verified identity.
 
-    Format: ws_<first 8 hex chars of v2 identity key hash>
+    Format: ws_<first 8 hex chars of v2 identity hash>
 
-    This is the actual directory name under workspaces/.
-    It never changes, even if the display name is updated.
+    The ARN is canonicalized before hashing to ensure stability
+    across different session names.
 
     Args:
         account_id: Verified STS account ID.
-        arn: Verified STS ARN.
+        arn: Verified STS ARN (raw — will be canonicalized).
 
     Returns:
         Directory name like 'ws_a1b2c3d4'.
     """
-    # Use raw hash (without prefix) for directory name
-    message = f"{account_id}\n{arn}".encode("utf-8")
+    canonical = canonicalize_arn(arn)
+    message = f"{account_id}\n{canonical}".encode("utf-8")
     digest = hmac.new(_HMAC_KEY_V2, message, hashlib.sha256).hexdigest()
     return f"ws_{digest[:8]}"
 
@@ -248,25 +297,55 @@ def lookup_workspace_by_identity(
 ) -> RegistryEntry | None:
     """Look up a workspace by v2 identity key (STS-verified).
 
-    This is the primary lookup for the `aws login` flow where the
-    identity is determined by STS, not by profile name.
+    Lookup order:
+    1. Canonical identity key (account_id + canonicalized ARN).
+    2. Scan all entries for one whose stored ARN canonicalizes to the
+       same principal and account. If found, migrate to canonical key.
 
     Args:
         account_id: Verified STS account ID.
-        arn: Verified STS ARN.
+        arn: Raw STS ARN (from GetCallerIdentity).
 
     Returns:
         RegistryEntry if found, None otherwise.
     """
-    key = compute_identity_key_v2(account_id, arn)
+    canonical_key = compute_identity_key_v2(account_id, arn)
     data = _read_registry()
     entries = data.get("entries", {})
-    if key in entries:
+
+    # 1. Try canonical key
+    if canonical_key in entries:
         try:
-            return RegistryEntry.from_dict(entries[key])
+            return RegistryEntry.from_dict(entries[canonical_key])
         except (KeyError, TypeError) as e:
-            logger.warning("Corrupt registry entry for key %s: %s", key, e)
+            logger.warning("Corrupt registry entry for key %s: %s", canonical_key, e)
             return None
+
+    # 2. Scan for old entries whose stored ARN canonicalizes to the same identity
+    target_canonical = canonicalize_arn(arn)
+    for key, entry_data in list(entries.items()):
+        if key == canonical_key:
+            continue
+        try:
+            entry = RegistryEntry.from_dict(entry_data)
+        except (KeyError, TypeError):
+            continue
+
+        if entry.account_id != account_id:
+            continue
+
+        # Check if the stored ARN canonicalizes to the same principal
+        if entry.arn and canonicalize_arn(entry.arn) == target_canonical:
+            # Migrate: register under canonical key, remove old key
+            entries[canonical_key] = entries.pop(key)
+            _write_registry(data)
+            logger.info(
+                "Migrated registry entry from raw-ARN key %s to canonical key %s "
+                "for workspace %s",
+                key, canonical_key, entry.workspace_dir,
+            )
+            return entry
+
     return None
 
 

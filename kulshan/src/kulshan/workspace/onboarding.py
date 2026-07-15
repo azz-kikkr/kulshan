@@ -86,34 +86,40 @@ def generate_display_name(
 ) -> str:
     """Generate a readable display name from the AWS identity.
 
-    Derives the human-readable prefix from the STS ARN:
-    - Role: 'readonly-role' from arn:aws:sts::123:assumed-role/readonly-role/session
-    - User: 'admin-user' from arn:aws:iam::123:user/admin-user
-    - Federated: 'federated-user' from arn:aws:sts::123:federated-user/name
+    Derives the human-readable prefix from the canonical principal ARN:
+    - Role: 'readonlyrole' from arn:aws:iam::123:role/ReadOnlyRole
+    - User: 'admin' from arn:aws:iam::123:user/admin
+    - Federated: 'federated-john' from arn:aws:sts::123:federated-user/john
 
     Falls back to profile name, then 'aws' as prefix.
 
     Appends a nature word selected deterministically from a hash.
 
+    The ARN is canonicalized internally so that display names are stable
+    across different session names.
+
     Args:
         account_id: Verified STS account ID.
-        arn: Verified STS ARN.
+        arn: Raw STS ARN (will be canonicalized for naming).
         profile: Optional profile name (used as fallback prefix).
 
     Returns:
-        Human-readable display name like 'readonly-role-cedar'.
+        Human-readable display name like 'readonlyrole-cedar'.
     """
-    prefix = _extract_principal_name(arn)
+    from kulshan.workspace.registry import canonicalize_arn
+
+    canonical = canonicalize_arn(arn)
+    prefix = _extract_principal_name(canonical)
     if not prefix and profile:
-        prefix = profile[:32]
+        prefix = _sanitize_display_prefix(profile)
     if not prefix:
         prefix = "aws"
 
     # Truncate prefix
     prefix = prefix[:32]
 
-    # Deterministic word from identity hash
-    message = f"{account_id}\n{arn}".encode("utf-8")
+    # Deterministic word from canonical identity hash
+    message = f"{account_id}\n{canonical}".encode("utf-8")
     hash_bytes = hmac.new(_NAME_HMAC_KEY, message, hashlib.sha256).digest()
     word = pick_word(hash_bytes)
 
@@ -121,13 +127,15 @@ def generate_display_name(
 
 
 def _extract_principal_name(arn: str) -> str:
-    """Extract a readable principal name from an STS ARN.
+    """Extract a readable principal name from an ARN.
 
-    Examples:
-        arn:aws:sts::123456789012:assumed-role/ReadOnlyRole/session → ReadOnlyRole
-        arn:aws:iam::123456789012:user/admin → admin
-        arn:aws:iam::123456789012:root → root
-        arn:aws:sts::123456789012:federated-user/john → federated-john
+    Works with both canonical and raw ARNs:
+        arn:aws:iam::123:role/ReadOnlyRole → readonlyrole
+        arn:aws:iam::123:role/team/finops/ReadOnlyRole → readonlyrole
+        arn:aws:sts::123:assumed-role/ReadOnlyRole/session → readonlyrole
+        arn:aws:iam::123:user/admin → admin
+        arn:aws:iam::123:root → root
+        arn:aws:sts::123:federated-user/john → federated-john
 
     Returns:
         A sanitized, lowercase, hyphenated name suitable for display.
@@ -137,19 +145,26 @@ def _extract_principal_name(arn: str) -> str:
         return ""
 
     try:
-        # ARN format: arn:partition:service:region:account:resource
         parts = arn.split(":")
         if len(parts) < 6:
             return ""
-        resource = parts[5]
+        resource = ":".join(parts[5:])
 
-        # assumed-role/RoleName/SessionName
+        # role/[path/]RoleName (canonical form)
+        if resource.startswith("role/"):
+            segments = resource.split("/")
+            return _sanitize_display_prefix(segments[-1])
+
+        # assumed-role/[path/]RoleName/SessionName (raw STS form)
         if resource.startswith("assumed-role/"):
             segments = resource.split("/")
-            if len(segments) >= 2:
+            if len(segments) >= 3:
+                # Role name is second-to-last (last is session)
+                return _sanitize_display_prefix(segments[-2])
+            elif len(segments) == 2:
                 return _sanitize_display_prefix(segments[1])
 
-        # user/UserName or user/path/UserName
+        # user/[path/]UserName
         if resource.startswith("user/"):
             segments = resource.split("/")
             return _sanitize_display_prefix(segments[-1])
@@ -164,7 +179,6 @@ def _extract_principal_name(arn: str) -> str:
         if resource == "root":
             return "root"
 
-        # Fallback: use the whole resource
         return _sanitize_display_prefix(resource)
     except Exception:
         return ""
