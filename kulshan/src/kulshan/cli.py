@@ -436,40 +436,190 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
                 sys.exit(ExitCode.CONFIG_ERROR)
 
     if ws_ctx.is_bound and onboarding_result is None:
-        # Bound workspace (explicit or found via registry): use execution resolver
-        try:
-            exec_ctx = resolve_aws_execution(
-                workspace=ws_ctx,
-                connection_name=connection_name,
-                profile=profile,
-                role_arn=role_arn,
-                show_pii=show_pii,
-            )
-            session = exec_ctx.session
-            account_id = exec_ctx.session_account_id
-        except (WorkspaceError, StsVerificationError) as e:
-            from kulshan.redact import redact_account_id, redact_arn
-            from kulshan.workspace.errors import WorkspaceCredentialMismatchError
-            if isinstance(e, WorkspaceCredentialMismatchError) and not show_pii:
-                console.print(
-                    f"[red]Credential mismatch for workspace '{e.workspace_name}': "
-                    f"expected account {redact_account_id(e.expected_account)}, "
-                    f"got {redact_account_id(e.actual_account)}.[/red]"
-                )
-            else:
-                console.print(f"[red]{e}[/red]")
-            sys.exit(ExitCode.CONFIG_ERROR)
+        # Bound workspace (explicit or found via registry)
+        has_multi_connections = (
+            ws_ctx.config.aws is not None
+            and len(ws_ctx.config.aws.connections) > 1
+            and not connection_name
+        )
 
-        # Show routing message for auto-onboarded workspaces found via registry
-        if not workspace_name and not connection_name:
-            display = ws_ctx.display_name
-            acct = exec_ctx.session_account_id
+        if has_multi_connections:
+            # Multi-connection consolidated report
+            from kulshan.consolidated import (
+                run_consolidated_report,
+                DefaultConnectionFailedError,
+                NoSuccessfulConnectionsError,
+            )
+            from kulshan.redact import redact_account_id
+
+            conn_dicts = [
+                {
+                    "name": c.name,
+                    "profile": c.profile,
+                    "role_arn": c.role_arn,
+                    "expected_session_account_id": c.expected_session_account_id,
+                }
+                for c in ws_ctx.config.aws.connections
+            ]
+
             console.print(
-                f"  Using [cyan]{display}[/cyan] "
-                f"[dim]· account {acct[:4]}…{acct[-4:]}[/dim]",
+                f"  [bold]Consolidated report[/bold] · "
+                f"{len(conn_dicts)} connections · {ws_ctx.display_name}",
                 highlight=False,
             )
             console.print()
+
+            try:
+                consolidated = run_consolidated_report(
+                    connections=conn_dicts,
+                    regions=regions if 'regions' in dir() else ["us-east-1"],
+                    selected_packs=selected_packs,
+                    quick=quick,
+                    deep=deep,
+                    days=days,
+                    console=console,
+                )
+            except DefaultConnectionFailedError as e:
+                console.print(f"[red]{e}[/red]")
+                console.print()
+                console.print(
+                    f"  [dim]Authenticate connection '{e.connection_name}' "
+                    f"and run the report again.[/dim]"
+                )
+                sys.exit(ExitCode.CONFIG_ERROR)
+            except NoSuccessfulConnectionsError as e:
+                console.print(f"[red]{e}[/red]")
+                sys.exit(ExitCode.CONFIG_ERROR)
+
+            # Use consolidated results
+            results = consolidated.results
+            all_findings = consolidated.all_findings
+            overall_score = consolidated.overall_score
+            overall_grade = consolidated.overall_grade
+            session = consolidated.successful_connections[0] if consolidated.successful_connections else None
+            account_id = consolidated.accounts_observed[0] if consolidated.accounts_observed else "unknown"
+            duration = consolidated.duration_seconds
+
+            # Coverage summary
+            status_label = consolidated.report_status.capitalize()
+            conn_names = ", ".join(c.connection_name for c in consolidated.successful_connections)
+            accts = ", ".join(
+                redact_account_id(a) if not show_pii else a
+                for a in consolidated.accounts_observed
+            )
+            console.print(f"  Report status: [bold]{status_label}[/bold]")
+            console.print(f"  Connections: {conn_names}")
+            console.print(f"  Accounts verified: {accts}")
+            console.print()
+
+            if consolidated.failed_connections:
+                for fc in consolidated.failed_connections:
+                    console.print(
+                        f"  [yellow]Connection \"{fc.connection_name}\" is unavailable.[/yellow]",
+                        highlight=False,
+                    )
+                console.print(
+                    f"  [dim]Authenticate that AWS login and run the report again.[/dim]",
+                    highlight=False,
+                )
+                console.print()
+
+            # Save history
+            if not no_history:
+                try:
+                    from kulshan.history import HistoryStore
+                    history = HistoryStore(ws_ctx.history_db_path)
+                    history.purge_old(retention_days=365)
+                    scan_id = history.save_scan(
+                        account_id=account_id,
+                        regions=regions if 'regions' in dir() else [],
+                        duration_seconds=duration,
+                        overall_score=overall_score,
+                        overall_grade=overall_grade,
+                        results=results,
+                        findings=all_findings,
+                        version=__version__,
+                        report_status=consolidated.report_status,
+                    )
+                    history.save_scan_connections(scan_id, [
+                        {
+                            "connection_name": ce.connection_name,
+                            "profile": ce.profile,
+                            "session_account_id": ce.session_account_id,
+                            "role_arn": ce.role_arn,
+                            "status": ce.status,
+                            "duration_seconds": ce.duration_seconds,
+                            "packs_attempted": ce.packs_attempted,
+                            "packs_completed": ce.packs_completed,
+                            "error_code": ce.error_code,
+                        }
+                        for ce in consolidated.connections_executed
+                    ])
+                    history.close()
+                except Exception:
+                    pass
+
+            # Compute top actions and metadata for output
+            from kulshan.findings_processor import process_findings
+            top_actions = process_findings(all_findings)[:10] if all_findings else []
+            scan_metadata = {
+                "report_status": consolidated.report_status,
+                "connections": len(consolidated.successful_connections),
+                "total_connections": len(consolidated.connections_executed),
+                "payer_connection": consolidated.payer_connection,
+            }
+
+            _emit_output(
+                fmt=fmt, results=results, overall_score=overall_score,
+                overall_grade=overall_grade, account_id=account_id,
+                regions=regions if 'regions' in dir() else [],
+                duration=duration, top_actions=top_actions,
+                all_findings=all_findings, output=output, show_pii=show_pii,
+                scan_metadata=scan_metadata, console=console,
+                history_db_path=ws_ctx.history_db_path,
+            )
+
+            has_critical = any(
+                r.get("scores", {}).get("severity_counts", {}).get("critical", 0) > 0
+                for r in results.values()
+            )
+            sys.exit(ExitCode.FINDING_FAIL if has_critical else ExitCode.SUCCESS)
+
+        else:
+            # Single-connection bound workspace: traditional execution
+            try:
+                exec_ctx = resolve_aws_execution(
+                    workspace=ws_ctx,
+                    connection_name=connection_name,
+                    profile=profile,
+                    role_arn=role_arn,
+                    show_pii=show_pii,
+                )
+                session = exec_ctx.session
+                account_id = exec_ctx.session_account_id
+            except (WorkspaceError, StsVerificationError) as e:
+                from kulshan.redact import redact_account_id, redact_arn
+                from kulshan.workspace.errors import WorkspaceCredentialMismatchError
+                if isinstance(e, WorkspaceCredentialMismatchError) and not show_pii:
+                    console.print(
+                        f"[red]Credential mismatch for workspace '{e.workspace_name}': "
+                        f"expected account {redact_account_id(e.expected_account)}, "
+                        f"got {redact_account_id(e.actual_account)}.[/red]"
+                    )
+                else:
+                    console.print(f"[red]{e}[/red]")
+                sys.exit(ExitCode.CONFIG_ERROR)
+
+            # Show routing message for auto-onboarded workspaces found via registry
+            if not workspace_name and not connection_name:
+                display = ws_ctx.display_name
+                acct = exec_ctx.session_account_id
+                console.print(
+                    f"  Using [cyan]{display}[/cyan] "
+                    f"[dim]· account {acct[:4]}…{acct[-4:]}[/dim]",
+                    highlight=False,
+                )
+                console.print()
     elif onboarding_result is not None:
         # Session already verified during onboarding — reuse it
         session = onboarding_result.verified_session.session

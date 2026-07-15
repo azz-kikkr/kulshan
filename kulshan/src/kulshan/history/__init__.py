@@ -46,11 +46,48 @@ CREATE TABLE IF NOT EXISTS scans (
     low_findings INTEGER DEFAULT 0,
     pack_scores TEXT,
     kulshan_version TEXT,
-    full_result_json TEXT
+    full_result_json TEXT,
+    report_status TEXT DEFAULT 'complete'
 );
 
 CREATE INDEX IF NOT EXISTS idx_scans_timestamp ON scans(timestamp);
 CREATE INDEX IF NOT EXISTS idx_scans_account ON scans(account_id);
+
+CREATE TABLE IF NOT EXISTS scan_connections (
+    scan_id TEXT NOT NULL,
+    connection_name TEXT NOT NULL,
+    profile TEXT,
+    session_account_id TEXT,
+    role_arn TEXT,
+    status TEXT NOT NULL,
+    duration_seconds REAL,
+    packs_attempted TEXT,
+    packs_completed TEXT,
+    error_code TEXT,
+    PRIMARY KEY (scan_id, connection_name)
+);
+"""
+
+# Migration: add columns/tables that may be missing in older databases
+_MIGRATION_SQL = """
+-- Add report_status if missing (safe: SQLite ignores duplicate ADD COLUMN)
+ALTER TABLE scans ADD COLUMN report_status TEXT DEFAULT 'complete';
+"""
+
+_MIGRATION_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS scan_connections (
+    scan_id TEXT NOT NULL,
+    connection_name TEXT NOT NULL,
+    profile TEXT,
+    session_account_id TEXT,
+    role_arn TEXT,
+    status TEXT NOT NULL,
+    duration_seconds REAL,
+    packs_attempted TEXT,
+    packs_completed TEXT,
+    error_code TEXT,
+    PRIMARY KEY (scan_id, connection_name)
+);
 """
 
 
@@ -73,10 +110,29 @@ class HistoryStore:
             self._conn.execute("PRAGMA foreign_keys=ON")
             self._conn.row_factory = sqlite3.Row
             self._conn.executescript(_SCHEMA)
+            # Run safe migrations for older databases
+            self._run_migrations()
             # Restrict file permissions to owner only
             with suppress(OSError):
                 self.db_path.chmod(0o600)
         return self._conn
+
+    def _run_migrations(self) -> None:
+        """Run safe schema migrations for older databases."""
+        conn = self._conn
+        if conn is None:
+            return
+        # Add report_status column (safe: ignores if already exists)
+        try:
+            conn.execute("SELECT report_status FROM scans LIMIT 0")
+        except sqlite3.OperationalError:
+            try:
+                conn.execute("ALTER TABLE scans ADD COLUMN report_status TEXT DEFAULT 'complete'")
+                conn.commit()
+            except sqlite3.OperationalError:
+                pass
+        # Create scan_connections table
+        conn.executescript(_MIGRATION_TABLE_SQL)
 
     def close(self):
         if self._conn:
@@ -94,6 +150,7 @@ class HistoryStore:
         findings: list[dict],
         version: str = "",
         store_full_result: bool = False,
+        report_status: str = "complete",
     ) -> str:
         """Save a scan result to history. Returns the scan ID."""
         conn = self._connect()
@@ -130,18 +187,55 @@ class HistoryStore:
             """INSERT INTO scans (id, timestamp, account_id, regions, duration_seconds,
                overall_score, overall_grade, total_findings, critical_findings,
                high_findings, medium_findings, low_findings, pack_scores,
-               kulshan_version, full_result_json)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               kulshan_version, full_result_json, report_status)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 scan_id, now, account_id, json.dumps(regions), duration_seconds,
                 overall_score, overall_grade, len(findings),
                 severity_counts["critical"], severity_counts["high"],
                 severity_counts["medium"], severity_counts["low"],
-                json.dumps(pack_scores), version, full_json,
+                json.dumps(pack_scores), version, full_json, report_status,
             ),
         )
         conn.commit()
         return scan_id
+
+    def save_scan_connections(
+        self,
+        scan_id: str,
+        connections: list[dict],
+    ) -> None:
+        """Save connection execution metadata for a consolidated scan.
+
+        Args:
+            scan_id: The parent scan ID.
+            connections: List of dicts with connection execution metadata.
+                Each must have: connection_name, status.
+                Optional: profile, session_account_id, role_arn,
+                          duration_seconds, packs_attempted, packs_completed, error_code.
+        """
+        conn = self._connect()
+        for c in connections:
+            conn.execute(
+                """INSERT OR REPLACE INTO scan_connections
+                   (scan_id, connection_name, profile, session_account_id,
+                    role_arn, status, duration_seconds, packs_attempted,
+                    packs_completed, error_code)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    scan_id,
+                    c.get("connection_name", ""),
+                    c.get("profile"),
+                    c.get("session_account_id"),
+                    c.get("role_arn"),
+                    c.get("status", "unknown"),
+                    c.get("duration_seconds"),
+                    json.dumps(c.get("packs_attempted", [])),
+                    json.dumps(c.get("packs_completed", [])),
+                    c.get("error_code"),
+                ),
+            )
+        conn.commit()
 
     def list_scans(
         self, limit: int = 20, account_id: str | None = None
