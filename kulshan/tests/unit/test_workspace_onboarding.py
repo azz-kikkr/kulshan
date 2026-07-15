@@ -169,37 +169,53 @@ class TestWorkspaceDirName:
 class TestDisplayNameGeneration:
     """Tests for readable display name generation."""
 
-    def test_format(self):
-        """Display name is 'profile-word'."""
-        name = generate_display_name("acme-finops", None, "999999999999")
+    def test_format_from_arn(self):
+        """Display name is 'principal-word' derived from ARN."""
+        arn = "arn:aws:sts::999999999999:assumed-role/acme-finops/session"
+        name = generate_display_name("999999999999", arn)
         parts = name.rsplit("-", 1)
         assert len(parts) == 2
-        assert parts[0] == "acme-finops"
         assert parts[1] in WORDS
+        assert "acme-finops" in name
+
+    def test_format_from_user_arn(self):
+        """User ARN produces user name prefix."""
+        arn = "arn:aws:iam::123456789012:user/admin"
+        name = generate_display_name("123456789012", arn)
+        assert name.startswith("admin-")
+        assert name.rsplit("-", 1)[1] in WORDS
 
     def test_deterministic(self):
         """Same inputs always produce the same display name."""
-        n1 = generate_display_name("prod", None, "123456789012")
-        n2 = generate_display_name("prod", None, "123456789012")
+        arn = "arn:aws:iam::123456789012:user/prod"
+        n1 = generate_display_name("123456789012", arn)
+        n2 = generate_display_name("123456789012", arn)
         assert n1 == n2
 
-    def test_truncates_long_profile(self):
-        """Profiles longer than 32 chars are truncated."""
-        long_profile = "a" * 50
-        name = generate_display_name(long_profile, None, "123456789012")
+    def test_profile_fallback(self):
+        """When ARN has no parseable name, falls back to profile."""
+        arn = "arn:aws:iam::123456789012:root"
+        name = generate_display_name("123456789012", arn, profile="my-company")
+        # root is parseable, so it should use "root"
+        assert name.startswith("root-")
+
+    def test_truncates_long_prefix(self):
+        """Long principal names are truncated."""
+        arn = "arn:aws:sts::123456789012:assumed-role/" + "a" * 50 + "/session"
+        name = generate_display_name("123456789012", arn)
         prefix = name.rsplit("-", 1)[0]
         assert len(prefix) <= 32
 
-    def test_role_arn_changes_word(self):
-        """Different role ARN produces different word (usually)."""
-        n1 = generate_display_name("prof", None, "123456789012")
-        n2 = generate_display_name(
-            "prof",
-            "arn:aws:iam::123456789012:role/admin",
+    def test_different_arn_changes_name(self):
+        """Different ARN produces different display name."""
+        n1 = generate_display_name(
             "123456789012",
+            "arn:aws:sts::123456789012:assumed-role/admin/session",
         )
-        # Different inputs — names should differ
-        # (could collide but extremely unlikely)
+        n2 = generate_display_name(
+            "123456789012",
+            "arn:aws:sts::123456789012:assumed-role/readonly/session",
+        )
         assert n1 != n2
 
 
@@ -398,7 +414,8 @@ class TestAutoOnboard:
 
         assert result.is_new is True
         assert result.account_id == "999999999999"
-        assert "acme" in result.display_name
+        # Display name derived from ARN (user/test → "test-<word>")
+        assert "test" in result.display_name
         assert result.workspace_context.is_bound
 
         # Workspace directory was created
@@ -1135,3 +1152,175 @@ class TestBindPayerAccount:
 
         with pytest.raises(PayerBindingError):
             bind_payer_account("ws_nonexist", "999999999999")
+
+
+# ---------------------------------------------------------------------------
+# Default Credential Flow Tests (aws login → kulshan report)
+# ---------------------------------------------------------------------------
+
+
+class TestDefaultCredentialFlow:
+    """Tests for the default credential flow (no profile supplied)."""
+
+    @pytest.fixture(autouse=True)
+    def _isolate(self, tmp_path, monkeypatch):
+        """Isolate all filesystem operations to tmp_path."""
+        self.tmp_path = tmp_path
+        self.workspaces_root = tmp_path / "workspaces"
+        self.workspaces_root.mkdir()
+
+        monkeypatch.setattr(
+            "kulshan.workspace.registry.get_data_dir",
+            lambda: tmp_path,
+        )
+        monkeypatch.setattr(
+            "kulshan.workspace.onboarding.get_workspace_path",
+            lambda name: self.workspaces_root / name,
+        )
+        monkeypatch.setattr(
+            "kulshan.workspace.paths.get_workspaces_root",
+            lambda: self.workspaces_root,
+        )
+        monkeypatch.delenv("AWS_PROFILE", raising=False)
+
+    @patch("kulshan.workspace.onboarding.create_verified_session")
+    def test_no_profile_auto_onboards_from_arn(self, mock_sts):
+        """No profile → default credentials → STS → auto-onboard from ARN."""
+        mock_sts.return_value = VerifiedAwsSession(
+            session=MagicMock(),
+            account_id="111111111111",
+            arn="arn:aws:sts::111111111111:assumed-role/ReadOnlyRole/session",
+            user_id="AROAEXAMPLE:session",
+            resolved_profile=None,
+            role_arn=None,
+        )
+
+        result = auto_onboard(profile=None)
+
+        assert result.is_new is True
+        assert result.account_id == "111111111111"
+        # Display name derived from role name
+        assert "readonlyrole" in result.display_name
+        assert result.workspace_context.is_bound
+
+    @patch("kulshan.workspace.onboarding.create_verified_session")
+    def test_same_identity_reuses_workspace_without_profile(self, mock_sts):
+        """Same STS identity on second run → reuses workspace."""
+        mock_sts.return_value = VerifiedAwsSession(
+            session=MagicMock(),
+            account_id="222222222222",
+            arn="arn:aws:sts::222222222222:assumed-role/BillingAudit/session",
+            user_id="AROAEXAMPLE:session",
+            resolved_profile=None,
+            role_arn=None,
+        )
+
+        r1 = auto_onboard(profile=None)
+        assert r1.is_new is True
+
+        r2 = auto_onboard(profile=None)
+        assert r2.is_new is False
+        assert r2.workspace_context.path == r1.workspace_context.path
+
+    @patch("kulshan.workspace.onboarding.create_verified_session")
+    def test_different_identities_get_separate_workspaces(self, mock_sts):
+        """Different login identities → separate workspaces."""
+        mock_sts.side_effect = [
+            VerifiedAwsSession(
+                session=MagicMock(),
+                account_id="111111111111",
+                arn="arn:aws:sts::111111111111:assumed-role/Admin/session",
+                user_id="AROAADMIN:session",
+                resolved_profile=None,
+                role_arn=None,
+            ),
+            VerifiedAwsSession(
+                session=MagicMock(),
+                account_id="222222222222",
+                arn="arn:aws:sts::222222222222:assumed-role/Billing/session",
+                user_id="AROABILLING:session",
+                resolved_profile=None,
+                role_arn=None,
+            ),
+        ]
+
+        r1 = auto_onboard(profile=None)
+        r2 = auto_onboard(profile=None)
+
+        assert r1.workspace_context.path != r2.workspace_context.path
+        assert r1.display_name != r2.display_name
+
+    @patch("kulshan.workspace.onboarding.create_verified_session")
+    def test_profile_and_no_profile_same_identity_share_workspace(self, mock_sts):
+        """Profile and no-profile reaching the same identity → same workspace.
+
+        This is the key insight: `aws login` and `kulshan --profile X` can
+        reach the same STS identity. They should route to the same workspace.
+        """
+        arn = "arn:aws:sts::333333333333:assumed-role/FinOps/session"
+        mock_sts.return_value = VerifiedAwsSession(
+            session=MagicMock(),
+            account_id="333333333333",
+            arn=arn,
+            user_id="AROAFINOPS:session",
+            resolved_profile="my-profile",
+            role_arn=None,
+        )
+
+        # First: with profile
+        r1 = auto_onboard(profile="my-profile")
+        assert r1.is_new is True
+
+        # Second: without profile but same identity
+        mock_sts.return_value = VerifiedAwsSession(
+            session=MagicMock(),
+            account_id="333333333333",
+            arn=arn,
+            user_id="AROAFINOPS:session",
+            resolved_profile=None,
+            role_arn=None,
+        )
+        r2 = auto_onboard(profile=None)
+        assert r2.is_new is False
+        assert r2.workspace_context.path == r1.workspace_context.path
+
+
+# ---------------------------------------------------------------------------
+# ARN Principal Extraction Tests
+# ---------------------------------------------------------------------------
+
+
+class TestExtractPrincipalName:
+    """Tests for _extract_principal_name."""
+
+    def test_assumed_role(self):
+        from kulshan.workspace.onboarding import _extract_principal_name
+        assert _extract_principal_name(
+            "arn:aws:sts::123456789012:assumed-role/ReadOnlyRole/session-name"
+        ) == "readonlyrole"
+
+    def test_user(self):
+        from kulshan.workspace.onboarding import _extract_principal_name
+        assert _extract_principal_name(
+            "arn:aws:iam::123456789012:user/admin-user"
+        ) == "admin-user"
+
+    def test_root(self):
+        from kulshan.workspace.onboarding import _extract_principal_name
+        assert _extract_principal_name(
+            "arn:aws:iam::123456789012:root"
+        ) == "root"
+
+    def test_federated_user(self):
+        from kulshan.workspace.onboarding import _extract_principal_name
+        assert _extract_principal_name(
+            "arn:aws:sts::123456789012:federated-user/john"
+        ) == "federated-john"
+
+    def test_empty_arn(self):
+        from kulshan.workspace.onboarding import _extract_principal_name
+        assert _extract_principal_name("") == ""
+
+    def test_invalid_arn(self):
+        from kulshan.workspace.onboarding import _extract_principal_name
+        assert _extract_principal_name("not-an-arn") == ""

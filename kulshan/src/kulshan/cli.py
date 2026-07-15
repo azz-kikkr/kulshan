@@ -339,7 +339,7 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
                     )
                 console.print(
                     f"  Using [cyan]{onboarding_result.display_name}[/cyan] "
-                    f"[dim]· {onboarding_result.profile or 'default'}[/dim]",
+                    f"[dim]· account {onboarding_result.account_id[:4]}…{onboarding_result.account_id[-4:]}[/dim]",
                     highlight=False,
                 )
                 console.print()
@@ -350,11 +350,34 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
                 console.print(f"[red]Environment onboarding failed: {e}[/red]")
                 sys.exit(ExitCode.CONFIG_ERROR)
         elif ws_ctx is None:
-            # No profile, no registered workspaces — fall back to unbound default
+            # No profile, no registered workspaces — auto-onboard using default credentials
             try:
-                ws_ctx = _resolve_ws(None)
-            except WorkspaceError as e:
-                console.print(f"[red]{e}[/red]")
+                onboarding_result = auto_onboard(
+                    profile=None,
+                    role_arn=role_arn,
+                )
+                ws_ctx = onboarding_result.workspace_context
+                if onboarding_result.is_new:
+                    console.print(
+                        f"  [green]✓[/green] Created environment "
+                        f"[cyan]{onboarding_result.display_name}[/cyan]",
+                        highlight=False,
+                    )
+                console.print(
+                    f"  Using [cyan]{onboarding_result.display_name}[/cyan] "
+                    f"[dim]· account {onboarding_result.account_id[:4]}…{onboarding_result.account_id[-4:]}[/dim]",
+                    highlight=False,
+                )
+                console.print()
+            except StsVerificationError as e:
+                # No valid credentials at all — fall back to unbound default
+                try:
+                    ws_ctx = _resolve_ws(None)
+                except WorkspaceError as ws_e:
+                    console.print(f"[red]{ws_e}[/red]")
+                    sys.exit(ExitCode.CONFIG_ERROR)
+            except OnboardingError as e:
+                console.print(f"[red]Environment onboarding failed: {e}[/red]")
                 sys.exit(ExitCode.CONFIG_ERROR)
 
     if ws_ctx.is_bound and onboarding_result is None:
@@ -385,9 +408,10 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
         # Show routing message for auto-onboarded workspaces found via registry
         if not workspace_name and not connection_name:
             display = ws_ctx.display_name
-            p = effective_profile or "default"
+            acct = exec_ctx.session_account_id
             console.print(
-                f"  Using [cyan]{display}[/cyan] [dim]· {p}[/dim]",
+                f"  Using [cyan]{display}[/cyan] "
+                f"[dim]· account {acct[:4]}…{acct[-4:]}[/dim]",
                 highlight=False,
             )
             console.print()
@@ -396,7 +420,7 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
         session = onboarding_result.verified_session.session
         account_id = onboarding_result.verified_session.account_id
     else:
-        # Unbound default (no profile available, no registered workspaces)
+        # Unbound default fallback (STS failed without credentials)
         try:
             exec_ctx = resolve_aws_execution(
                 workspace=ws_ctx,
@@ -408,17 +432,6 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
         except (WorkspaceError, StsVerificationError) as e:
             console.print(f"[red]{e}[/red]")
             sys.exit(ExitCode.CONFIG_ERROR)
-        # Unbound warning (once per invocation)
-        console.print(
-            "[yellow]Warning:[/yellow] Using the unbound default workspace.",
-            highlight=False,
-        )
-        console.print(
-            "[dim]Runs from different AWS profiles may be stored together. "
-            "Create a bound workspace to isolate payer data.[/dim]",
-            highlight=False,
-        )
-        console.print()
 
     # Pre-flight health check (with CUR discovery)
     from kulshan.preflight import run_preflight_with_cur

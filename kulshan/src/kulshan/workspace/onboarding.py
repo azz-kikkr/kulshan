@@ -1,20 +1,25 @@
 """Automatic AWS environment onboarding.
 
-On first use of an AWS profile, Kulshan:
-1. Verifies STS credentials.
-2. Generates a stable workspace ID from profile + role_arn + account.
-3. Creates a readable display name (e.g. 'acme-finops-cedar').
+On first use of an AWS identity, Kulshan:
+1. Verifies STS credentials (GetCallerIdentity).
+2. Generates a stable workspace ID from STS account + ARN.
+3. Creates a readable display name from the principal/role.
 4. Creates a bound workspace with a single connection.
 5. Registers the mapping for future automatic routing.
 
-On subsequent use, Kulshan looks up the registry and routes to the
-correct workspace automatically — no manual workspace management needed.
+On subsequent use, Kulshan looks up the registry by verified identity
+and routes to the correct workspace automatically.
+
+Supports both:
+- `aws login` → `kulshan report` (no profile, default credentials)
+- `kulshan --profile X report` (explicit profile)
 """
 from __future__ import annotations
 
 import hashlib
 import hmac
 import logging
+import re
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
@@ -27,9 +32,10 @@ from kulshan.workspace.config import (
 from kulshan.workspace.context import WorkspaceContext
 from kulshan.workspace.paths import get_workspace_path
 from kulshan.workspace.registry import (
-    compute_workspace_dir_name,
+    compute_workspace_dir_name_v2,
     find_entry_by_workspace_dir,
     lookup_workspace,
+    lookup_workspace_by_identity,
     register_workspace,
     RegistryEntry,
 )
@@ -73,42 +79,125 @@ class OnboardingResult:
         return self.verified_session.account_id
 
 
-def generate_display_name(profile: str, role_arn: str | None, account_id: str) -> str:
-    """Generate a readable display name like 'acme-finops-cedar'.
+def generate_display_name(
+    account_id: str,
+    arn: str,
+    profile: str | None = None,
+) -> str:
+    """Generate a readable display name from the AWS identity.
 
-    Combines the profile name with a nature word selected deterministically
-    from the identity hash.
+    Derives the human-readable prefix from the STS ARN:
+    - Role: 'readonly-role' from arn:aws:sts::123:assumed-role/readonly-role/session
+    - User: 'admin-user' from arn:aws:iam::123:user/admin-user
+    - Federated: 'federated-user' from arn:aws:sts::123:federated-user/name
+
+    Falls back to profile name, then 'aws' as prefix.
+
+    Appends a nature word selected deterministically from a hash.
 
     Args:
-        profile: AWS CLI profile name.
-        role_arn: Optional role ARN.
         account_id: Verified STS account ID.
+        arn: Verified STS ARN.
+        profile: Optional profile name (used as fallback prefix).
 
     Returns:
-        Human-readable display name.
+        Human-readable display name like 'readonly-role-cedar'.
     """
-    message = f"{profile}\n{role_arn or ''}\n{account_id}".encode("utf-8")
+    prefix = _extract_principal_name(arn)
+    if not prefix and profile:
+        prefix = profile[:32]
+    if not prefix:
+        prefix = "aws"
+
+    # Truncate prefix
+    prefix = prefix[:32]
+
+    # Deterministic word from identity hash
+    message = f"{account_id}\n{arn}".encode("utf-8")
     hash_bytes = hmac.new(_NAME_HMAC_KEY, message, hashlib.sha256).digest()
     word = pick_word(hash_bytes)
-    # Use the profile as-is for the prefix, truncate if very long
-    prefix = profile[:32] if len(profile) > 32 else profile
+
     return f"{prefix}-{word}"
+
+
+def _extract_principal_name(arn: str) -> str:
+    """Extract a readable principal name from an STS ARN.
+
+    Examples:
+        arn:aws:sts::123456789012:assumed-role/ReadOnlyRole/session → ReadOnlyRole
+        arn:aws:iam::123456789012:user/admin → admin
+        arn:aws:iam::123456789012:root → root
+        arn:aws:sts::123456789012:federated-user/john → federated-john
+
+    Returns:
+        A sanitized, lowercase, hyphenated name suitable for display.
+        Empty string if parsing fails.
+    """
+    if not arn or ":" not in arn:
+        return ""
+
+    try:
+        # ARN format: arn:partition:service:region:account:resource
+        parts = arn.split(":")
+        if len(parts) < 6:
+            return ""
+        resource = parts[5]
+
+        # assumed-role/RoleName/SessionName
+        if resource.startswith("assumed-role/"):
+            segments = resource.split("/")
+            if len(segments) >= 2:
+                return _sanitize_display_prefix(segments[1])
+
+        # user/UserName or user/path/UserName
+        if resource.startswith("user/"):
+            segments = resource.split("/")
+            return _sanitize_display_prefix(segments[-1])
+
+        # federated-user/Name
+        if resource.startswith("federated-user/"):
+            segments = resource.split("/")
+            if len(segments) >= 2:
+                return _sanitize_display_prefix(f"federated-{segments[-1]}")
+
+        # root
+        if resource == "root":
+            return "root"
+
+        # Fallback: use the whole resource
+        return _sanitize_display_prefix(resource)
+    except Exception:
+        return ""
+
+
+def _sanitize_display_prefix(name: str) -> str:
+    """Sanitize a name for use as a display name prefix.
+
+    Converts to lowercase, replaces non-alphanumeric with hyphens,
+    removes leading/trailing hyphens.
+    """
+    name = name.lower()
+    name = re.sub(r"[^a-z0-9-]", "-", name)
+    name = re.sub(r"-+", "-", name)
+    name = name.strip("-")
+    return name[:32] if name else ""
 
 
 def auto_onboard(
     profile: str | None,
     role_arn: str | None = None,
 ) -> OnboardingResult:
-    """Perform automatic onboarding or routing for a profile.
+    """Perform automatic onboarding or routing for an AWS identity.
 
     Flow:
-    1. Create and verify STS session.
-    2. Look up existing workspace in registry.
-    3. If found, load and return existing workspace context.
-    4. If not found, create new workspace and register it.
+    1. Create and verify STS session (GetCallerIdentity).
+    2. Look up existing workspace by verified identity (v2 key).
+    3. Fall back to v1 profile-based lookup for backward compat.
+    4. If found, load and return existing workspace context.
+    5. If not found, create new workspace and register it.
 
     Args:
-        profile: AWS CLI profile name (None for default chain).
+        profile: AWS CLI profile name (None for default credential chain).
         role_arn: Optional IAM role ARN to assume.
 
     Returns:
@@ -124,28 +213,22 @@ def auto_onboard(
         role_arn=role_arn,
     )
 
-    effective_profile = profile or _get_effective_profile_name()
     account_id = verified.account_id
+    arn = verified.arn
 
-    # Step 2: Check registry for existing workspace
-    existing = lookup_workspace(effective_profile, role_arn, account_id)
+    # Step 2: Look up by v2 identity key (account_id + arn)
+    existing = lookup_workspace_by_identity(account_id, arn)
     if existing:
         return _load_existing_workspace(existing, verified)
 
-    # Step 3: Create new workspace
-    return _create_onboarded_workspace(
-        effective_profile, role_arn, account_id, verified
-    )
+    # Step 3: Fall back to v1 lookup (profile-based) for backward compat
+    if profile:
+        existing = lookup_workspace(profile, role_arn, account_id)
+        if existing:
+            return _load_existing_workspace(existing, verified)
 
-
-def _get_effective_profile_name() -> str:
-    """Get a usable profile name when none was explicitly provided.
-
-    Falls back to AWS_PROFILE env var, then 'default'.
-    """
-    import os
-
-    return os.environ.get("AWS_PROFILE", "default")
+    # Step 4: Create new workspace
+    return _create_onboarded_workspace(profile, role_arn, account_id, arn, verified)
 
 
 def _load_existing_workspace(
@@ -180,6 +263,7 @@ def _load_existing_workspace(
             entry.profile,
             entry.role_arn,
             entry.account_id,
+            verified.arn,
             verified,
         )
 
@@ -195,17 +279,19 @@ def _load_existing_workspace(
 
 
 def _create_onboarded_workspace(
-    profile: str,
+    profile: str | None,
     role_arn: str | None,
     account_id: str,
+    arn: str,
     verified: VerifiedAwsSession,
 ) -> OnboardingResult:
     """Create a new auto-onboarded workspace.
 
     Args:
-        profile: AWS CLI profile name.
+        profile: AWS CLI profile name (may be None).
         role_arn: Optional role ARN.
         account_id: Verified STS account ID.
+        arn: Verified STS ARN.
         verified: Already-verified AWS session.
 
     Returns:
@@ -213,19 +299,19 @@ def _create_onboarded_workspace(
     """
     now = datetime.now(timezone.utc).isoformat()
 
-    # Generate stable directory name
-    workspace_dir = compute_workspace_dir_name(profile, role_arn, account_id)
+    # Generate stable directory name from verified identity
+    workspace_dir = compute_workspace_dir_name_v2(account_id, arn)
 
-    # Generate readable display name
-    display_name = generate_display_name(profile, role_arn, account_id)
+    # Generate readable display name from ARN
+    display_name = generate_display_name(account_id, arn, profile)
 
-    # Derive connection name from profile
-    conn_name = _sanitize_connection_name(profile)
+    # Derive connection name
+    conn_name = _sanitize_connection_name(profile or _extract_principal_name(arn) or "primary")
 
     # Build workspace config
     connection = AwsConnection(
         name=conn_name,
-        profile=profile,
+        profile=profile or "default",
         expected_session_account_id=account_id,
         role_arn=role_arn,
     )
@@ -261,7 +347,7 @@ def _create_onboarded_workspace(
             f"Failed to write workspace configuration: {e}"
         ) from e
 
-    # Register in the profile registry
+    # Register in the identity registry (both v1 and v2 keys)
     register_workspace(
         profile=profile,
         role_arn=role_arn,
@@ -269,16 +355,17 @@ def _create_onboarded_workspace(
         workspace_dir=workspace_dir,
         display_name=display_name,
         created_at=now,
+        arn=arn,
     )
 
     # Build context
     context = WorkspaceContext.from_path(workspace_path, config)
 
     logger.info(
-        "Auto-onboarded workspace '%s' (%s) for profile '%s', account %s",
+        "Auto-onboarded workspace '%s' (%s) for identity %s, account %s",
         display_name,
         workspace_dir,
-        profile,
+        arn,
         account_id,
     )
 
