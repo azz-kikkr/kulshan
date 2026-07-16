@@ -86,9 +86,15 @@ desktop.ini
 
 # --- Internal strategy docs (not for buyers) ---
 AWS_TOOLS_ANALYSIS.md
+agents.md
+agent-pack/
+kulshan/agents/
+kulshan/VISION.md
+kulshan/ROADMAP.md
 
 # --- Research scratch (LOCAL-ONLY, review later before any commit) ---
 docs/research for finops site/
+docs/kulshan-docs/
 
 # --- Marketing / GTM (LOCAL-ONLY, NEVER commit, NEVER push) ---
 # Outreach playbooks, prospecting lists, founder-team plans.
