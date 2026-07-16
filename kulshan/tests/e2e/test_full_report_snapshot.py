@@ -39,11 +39,32 @@ def fixture_results() -> dict:
 @pytest.fixture
 def mocked_environment(fixture_results):
     """Patch AWS boundaries so report runs offline."""
+    from kulshan.workspace.context import WorkspaceContext
+    from kulshan.workspace.config import WorkspaceConfig
+
+    # Create a fake unbound workspace context that skips onboarding
+    fake_config = WorkspaceConfig(name="default", binding_mode="unbound")
+    fake_ws = WorkspaceContext(
+        name="default",
+        path=Path.home() / ".kulshan-test-fake",
+        config=fake_config,
+        history_db_path=Path.home() / ".kulshan-test-fake" / "history.db",
+        security_history_db_path=Path.home() / ".kulshan-test-fake" / "sec.db",
+    )
+
+    fake_exec = MagicMock()
+    fake_exec.session = MagicMock()
+    fake_exec.session_account_id = ACCOUNT_ID
+    fake_exec.is_unbound = True
+
     with (
         patch("kulshan.session.create_session", return_value=MagicMock()),
         patch("kulshan.session.get_account_id", return_value=ACCOUNT_ID),
         patch("kulshan.session.get_enabled_regions", return_value=list(REGIONS)),
         patch("kulshan.orchestrator.run_all_scans", return_value=fixture_results),
+        patch("kulshan.workspace.resolution.resolve_workspace", return_value=fake_ws),
+        patch("kulshan.workspace.resolution.resolve_workspace_with_profile", return_value=fake_ws),
+        patch("kulshan.workspace.execution.resolve_aws_execution", return_value=fake_exec),
     ):
         yield
 
@@ -51,15 +72,36 @@ def mocked_environment(fixture_results):
 @pytest.fixture
 def cost_only_environment():
     """Only cost pack returns data; others are absent."""
+    from kulshan.workspace.context import WorkspaceContext
+    from kulshan.workspace.config import WorkspaceConfig
+
     cost_fixture = json.loads(
         (FIXTURES_DIR / "cost.json").read_text(encoding="utf-8")
     )
     results = {"cost": cost_fixture}
+
+    fake_config = WorkspaceConfig(name="default", binding_mode="unbound")
+    fake_ws = WorkspaceContext(
+        name="default",
+        path=Path.home() / ".kulshan-test-fake",
+        config=fake_config,
+        history_db_path=Path.home() / ".kulshan-test-fake" / "history.db",
+        security_history_db_path=Path.home() / ".kulshan-test-fake" / "sec.db",
+    )
+
+    fake_exec = MagicMock()
+    fake_exec.session = MagicMock()
+    fake_exec.session_account_id = ACCOUNT_ID
+    fake_exec.is_unbound = True
+
     with (
         patch("kulshan.session.create_session", return_value=MagicMock()),
         patch("kulshan.session.get_account_id", return_value=ACCOUNT_ID),
         patch("kulshan.session.get_enabled_regions", return_value=["us-east-1"]),
         patch("kulshan.orchestrator.run_all_scans", return_value=results),
+        patch("kulshan.workspace.resolution.resolve_workspace", return_value=fake_ws),
+        patch("kulshan.workspace.resolution.resolve_workspace_with_profile", return_value=fake_ws),
+        patch("kulshan.workspace.execution.resolve_aws_execution", return_value=fake_exec),
     ):
         yield
 
@@ -216,6 +258,9 @@ class TestNoFindings:
 
     @pytest.fixture
     def empty_environment(self):
+        from kulshan.workspace.context import WorkspaceContext
+        from kulshan.workspace.config import WorkspaceConfig
+
         empty_results = {
             "cost": {
                 "tool": "cost",
@@ -229,11 +274,29 @@ class TestNoFindings:
                 "metadata": {},
             }
         }
+
+        fake_config = WorkspaceConfig(name="default", binding_mode="unbound")
+        fake_ws = WorkspaceContext(
+            name="default",
+            path=Path.home() / ".kulshan-test-fake",
+            config=fake_config,
+            history_db_path=Path.home() / ".kulshan-test-fake" / "history.db",
+            security_history_db_path=Path.home() / ".kulshan-test-fake" / "sec.db",
+        )
+
+        fake_exec = MagicMock()
+        fake_exec.session = MagicMock()
+        fake_exec.session_account_id = ACCOUNT_ID
+        fake_exec.is_unbound = True
+
         with (
             patch("kulshan.session.create_session", return_value=MagicMock()),
             patch("kulshan.session.get_account_id", return_value=ACCOUNT_ID),
             patch("kulshan.session.get_enabled_regions", return_value=["us-east-1"]),
             patch("kulshan.orchestrator.run_all_scans", return_value=empty_results),
+            patch("kulshan.workspace.resolution.resolve_workspace", return_value=fake_ws),
+            patch("kulshan.workspace.resolution.resolve_workspace_with_profile", return_value=fake_ws),
+            patch("kulshan.workspace.execution.resolve_aws_execution", return_value=fake_exec),
         ):
             yield
 
