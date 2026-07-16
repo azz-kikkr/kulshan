@@ -23,8 +23,6 @@ Ten read-only audit packs in one CLI. Cost anomalies, security posture, waste de
 
 Reads your Cost Explorer data and your own CUR/Data Export Parquet files in place. No data leaves your machine. No SaaS account. No telemetry. Nothing to opt out of, because nothing exists.
 
-Think of it as a baseline before deeper FinOps work, platform evaluations, or leadership reviews.
-
 ---
 
 ## What Kulshan does not do
@@ -146,7 +144,7 @@ Seven tools: `kulshan_doctor`, `kulshan_report`, `kulshan_quick_security`, `kuls
 ## Output Formats
 
 ```bash
-kulshan report -o report.html           # Self-contained HTML, hand to your VP
+kulshan report -o report.html           # Self-contained HTML report
 kulshan report --format json -o s.json  # Structured, machine-readable
 kulshan report --format sarif -o r.sarif # GitHub Security tab
 kulshan report --format csv -o f.csv    # Spreadsheet / JIRA import
@@ -212,11 +210,9 @@ Kulshan is the Lummi name for the mountain known colonially as Mt. Baker — mea
 
 ---
 
-## Built by
+## Maintained by
 
-[Mission FinOps](https://missionfinops.com) | Mission, BC, Canada
-
-hello@missionfinops.com | security@missionfinops.com
+[Mission FinOps](https://missionfinops.com) — open-source AWS audit tooling.
 
 ---
 

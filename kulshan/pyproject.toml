@@ -5,14 +5,14 @@ build-backend = "hatchling.build"
 [project]
 name = "kulshan"
 dynamic = ["version"]
-description = "Local-first, read-only AWS audit CLI. Generate a VP/CFO-ready AWS audit report in minutes."
+description = "Local-first, read-only AWS audit CLI. Ten audit packs, one command, zero writes."
 readme = "README.md"
 license = { text = "Apache-2.0" }
 requires-python = ">=3.9"
 authors = [
-    { name = "Yuvdeep Singh" }
+    { name = "Mission FinOps" }
 ]
-keywords = ["aws", "finops", "cost", "security", "cli", "devops", "slm", "local-ai", "mission-finops"]
+keywords = ["aws", "finops", "cost", "security", "cli", "devops", "audit", "read-only", "cloud"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",

@@ -100,11 +100,9 @@ Kulshan is the Lummi name for the mountain known colonially as Mt. Baker — mea
 
 ---
 
-## Built by
+## Maintained by
 
-[Mission FinOps](https://missionfinops.com) | Mission, BC, Canada
-
-hello@missionfinops.com | security@missionfinops.com
+[Mission FinOps](https://missionfinops.com) — open-source AWS audit tooling.
 
 ---
 
