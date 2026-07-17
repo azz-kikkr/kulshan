@@ -2135,8 +2135,10 @@ main.add_command(workspace_group)
 
 
 @main.command()
+@click.option("--deep", is_flag=True, help="Probe each pack's required permissions.")
+@click.option("--json", "json_output", is_flag=True, help="Output JSON to stdout (no terminal decoration).")
 @click.pass_context
-def preflight(ctx: click.Context) -> None:
+def preflight(ctx: click.Context, deep: bool, json_output: bool) -> None:
     """Check AWS connectivity and readiness without running a scan.
 
     \b
@@ -2146,15 +2148,57 @@ def preflight(ctx: click.Context) -> None:
       - Cost Explorer API is reachable
       - Required permissions are present
 
+    \b
+    Flags:
+      --deep   Probe every pack's service requirements.
+      --json   Output valid JSON to stdout (no Rich formatting).
+
     No data is written. No cost is incurred. Safe to run repeatedly.
     """
-    from rich.console import Console as RichConsole
     from kulshan.session import create_session
-    from kulshan.preflight import run_preflight
 
-    console = RichConsole()
     profile = ctx.obj.get("profile")
     role_arn = ctx.obj.get("role_arn")
+
+    # JSON mode: no Rich console output at all
+    if json_output:
+        import json as json_mod
+        from kulshan.preflight import (
+            run_preflight_basic_json,
+            run_preflight_deep,
+            deep_result_to_json,
+        )
+
+        try:
+            session = create_session(profile=profile, role_arn=role_arn)
+        except Exception as e:
+            output = {
+                "identity": {"arn": "", "account_id": "", "partition": ""},
+                "workspace": {"name": None, "payer_account_id": None},
+                "connections": [],
+                "permissions": {"sts": "error"},
+                "data_sources": {"cost_explorer": "not_checked", "cur_local": "not_configured", "cur_s3": "not_configured"},
+                "packs": {},
+                "warnings": [],
+                "errors": [f"Cannot create AWS session: {e}"],
+            }
+            click.echo(json_mod.dumps(output, indent=2))
+            return
+
+        if deep:
+            result = run_preflight_deep(session)
+            output = deep_result_to_json(result)
+        else:
+            output = run_preflight_basic_json(session)
+
+        click.echo(json_mod.dumps(output, indent=2))
+        return
+
+    # Interactive mode (Rich console)
+    from rich.console import Console as RichConsole
+    from kulshan.preflight import run_preflight, run_preflight_deep
+
+    console = RichConsole()
 
     console.print()
     console.print("  [bold]Kulshan Preflight[/bold] -- checking AWS readiness")
@@ -2169,6 +2213,23 @@ def preflight(ctx: click.Context) -> None:
         sys.exit(ExitCode.CONFIG_ERROR)
 
     passed, warnings = run_preflight(session, console=console)
+
+    if deep and passed:
+        # Deep mode: probe every pack
+        console.print("  [bold]Deep probe[/bold] — checking per-pack permissions")
+        console.print()
+
+        deep_result = run_preflight_deep(session)
+
+        for pack_name, pack_result in deep_result.packs.items():
+            if pack_result.readiness == "ready":
+                console.print(f"  [green]✓[/green] {pack_name}: ready")
+            elif pack_result.readiness == "partial":
+                console.print(f"  [yellow]⚠[/yellow] {pack_name}: partial ({pack_result.reason})")
+            else:
+                console.print(f"  [red]✗[/red] {pack_name}: {pack_result.readiness}")
+
+        console.print()
 
     if passed:
         console.print()

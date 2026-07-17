@@ -2,10 +2,17 @@
 from __future__ import annotations
 
 import sys
-from dataclasses import dataclass
-from typing import Any, List, Optional, Tuple
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Tuple
 
 from rich.console import Console
+
+from kulshan.capabilities import (
+    PACK_PROBES,
+    CapabilityStatus,
+    PackReadinessResult,
+    assess_pack_readiness,
+)
 
 
 @dataclass
@@ -16,6 +23,20 @@ class PreflightResult:
     warnings: List[str]
     cur_export: Optional[Any] = None  # CurExportInfo if discovered
     cur_accessible: bool = False
+
+
+@dataclass
+class PreflightDeepResult:
+    """Complete preflight result for --deep mode."""
+
+    passed: bool
+    identity: Dict[str, Any]  # arn, account_id, user_id, partition
+    workspace: Dict[str, Any]  # name, payer, connections
+    permissions: Dict[str, CapabilityStatus]  # service -> status
+    data_sources: Dict[str, str]  # cur, cost_explorer, etc.
+    packs: Dict[str, PackReadinessResult] = field(default_factory=dict)
+    warnings: List[str] = field(default_factory=list)
+    errors: List[str] = field(default_factory=list)
 
 
 def run_preflight(
@@ -205,3 +226,239 @@ def run_preflight_with_cur(
         pass
     
     return result
+
+
+def mask_account_id(account_id: str) -> str:
+    """Mask an account ID: show first 5 + '***' + last 4 digits.
+
+    Example: '123456789012' -> '12345***9012'
+    """
+    if not account_id or len(account_id) < 9:
+        return account_id
+    return f"{account_id[:5]}***{account_id[-4:]}"
+
+
+def run_preflight_deep(
+    session: Any,
+    console: Console | None = None,
+    verbose: bool = False,
+) -> PreflightDeepResult:
+    """Run deep preflight: identity check + per-pack capability probes.
+
+    Probes every pack's required services and returns structured results.
+    """
+    if console is None:
+        console = Console()
+
+    warnings: List[str] = []
+    errors: List[str] = []
+    identity: Dict[str, Any] = {}
+    permissions: Dict[str, CapabilityStatus] = {}
+    data_sources: Dict[str, str] = {
+        "cost_explorer": "not_checked",
+        "cur_local": "not_configured",
+        "cur_s3": "not_configured",
+    }
+    workspace: Dict[str, Any] = {"name": None, "payer_account_id": None, "connections": []}
+    packs: Dict[str, PackReadinessResult] = {}
+    passed = True
+
+    # 1. STS identity check
+    try:
+        sts = session.client("sts")
+        caller = sts.get_caller_identity()
+        identity = {
+            "arn": caller.get("Arn", ""),
+            "account_id": caller.get("Account", ""),
+            "user_id": caller.get("UserId", ""),
+            "partition": caller.get("Arn", "").split(":")[1] if ":" in caller.get("Arn", "") else "aws",
+        }
+        permissions["sts"] = "available"
+    except Exception as e:
+        passed = False
+        errors.append(f"STS authentication failed: {str(e)[:100]}")
+        permissions["sts"] = "denied"
+        # Cannot continue without identity
+        return PreflightDeepResult(
+            passed=False,
+            identity=identity,
+            workspace=workspace,
+            permissions=permissions,
+            data_sources=data_sources,
+            packs=packs,
+            warnings=warnings,
+            errors=errors,
+        )
+
+    # 2. Probe each pack
+    for pack_name in PACK_PROBES:
+        result = assess_pack_readiness(session, pack_name)
+        packs[pack_name] = result
+
+        # Aggregate per-service permissions
+        for cap in result.capabilities:
+            key = cap.service
+            # If we already marked it available, keep that
+            if permissions.get(key) == "available":
+                continue
+            permissions[key] = cap.status
+
+    # 3. Data sources assessment
+    if permissions.get("ce") == "available":
+        data_sources["cost_explorer"] = "available"
+    elif permissions.get("ce") == "denied":
+        data_sources["cost_explorer"] = "denied"
+    else:
+        data_sources["cost_explorer"] = permissions.get("ce", "not_checked")
+
+    # 4. Check if all packs are unavailable
+    all_unavailable = all(p.readiness == "unavailable" for p in packs.values())
+    if all_unavailable:
+        warnings.append("All pack probes returned denied/unavailable")
+
+    return PreflightDeepResult(
+        passed=passed,
+        identity=identity,
+        workspace=workspace,
+        permissions=permissions,
+        data_sources=data_sources,
+        packs=packs,
+        warnings=warnings,
+        errors=errors,
+    )
+
+
+def deep_result_to_json(result: PreflightDeepResult) -> Dict[str, Any]:
+    """Convert a PreflightDeepResult to a JSON-serializable dict.
+
+    Account IDs are masked in the output.
+    """
+    # Mask account ID
+    masked_account = mask_account_id(result.identity.get("account_id", ""))
+
+    # Build packs section
+    packs_json: Dict[str, Any] = {}
+    for pack_name, pack_result in result.packs.items():
+        packs_json[pack_name] = {
+            "readiness": pack_result.readiness,
+            "reason": pack_result.reason,
+        }
+
+    return {
+        "identity": {
+            "arn": result.identity.get("arn", ""),
+            "account_id": masked_account,
+            "partition": result.identity.get("partition", "aws"),
+        },
+        "workspace": {
+            "name": result.workspace.get("name"),
+            "payer_account_id": mask_account_id(result.workspace.get("payer_account_id") or ""),
+        },
+        "connections": result.workspace.get("connections", []),
+        "permissions": dict(result.permissions),
+        "data_sources": dict(result.data_sources),
+        "packs": packs_json,
+        "warnings": list(result.warnings),
+        "errors": list(result.errors),
+    }
+
+
+def basic_result_to_json(
+    passed: bool,
+    identity: Dict[str, Any],
+    permissions: Dict[str, CapabilityStatus],
+    warnings: List[str],
+) -> Dict[str, Any]:
+    """Convert basic preflight results to a JSON-serializable dict."""
+    masked_account = mask_account_id(identity.get("account_id", ""))
+
+    return {
+        "identity": {
+            "arn": identity.get("arn", ""),
+            "account_id": masked_account,
+            "partition": identity.get("partition", "aws"),
+        },
+        "workspace": {"name": None, "payer_account_id": None},
+        "connections": [],
+        "permissions": dict(permissions),
+        "data_sources": {
+            "cost_explorer": permissions.get("ce", "not_checked"),
+            "cur_local": "not_configured",
+            "cur_s3": "not_configured",
+        },
+        "packs": {},
+        "warnings": list(warnings),
+        "errors": [] if passed else ["Pre-flight checks failed"],
+    }
+
+
+def run_preflight_basic_json(session: Any) -> Dict[str, Any]:
+    """Run basic preflight (no deep) and return JSON-ready dict.
+
+    No Rich output is produced.
+    """
+    identity: Dict[str, Any] = {}
+    permissions: Dict[str, CapabilityStatus] = {}
+    warnings: List[str] = []
+    passed = True
+
+    # STS check
+    try:
+        sts = session.client("sts")
+        caller = sts.get_caller_identity()
+        identity = {
+            "arn": caller.get("Arn", ""),
+            "account_id": caller.get("Account", ""),
+            "user_id": caller.get("UserId", ""),
+            "partition": caller.get("Arn", "").split(":")[1] if ":" in caller.get("Arn", "") else "aws",
+        }
+        permissions["sts"] = "available"
+    except Exception:
+        passed = False
+        return basic_result_to_json(False, identity, permissions, ["STS authentication failed"])
+
+    # Cost Explorer
+    try:
+        from datetime import date, timedelta
+
+        probe_end = date.today()
+        probe_start = probe_end - timedelta(days=2)
+        ce = session.client("ce", region_name="us-east-1")
+        ce.get_cost_and_usage(
+            TimePeriod={"Start": probe_start.isoformat(), "End": probe_end.isoformat()},
+            Granularity="DAILY",
+            Metrics=["BlendedCost"],
+        )
+        permissions["ce"] = "available"
+    except Exception as e:
+        error_msg = str(e)
+        if "AccessDenied" in error_msg:
+            permissions["ce"] = "denied"
+            warnings.append("No ce:GetCostAndUsage permission")
+        else:
+            permissions["ce"] = "error"
+            warnings.append(f"CE check: {error_msg[:60]}")
+
+    # EC2
+    try:
+        ec2 = session.client("ec2", region_name="us-east-1")
+        ec2.describe_instances(MaxResults=5)
+        permissions["ec2"] = "available"
+    except Exception as e:
+        error_msg = str(e)
+        if "UnauthorizedOperation" in error_msg or "AccessDenied" in error_msg:
+            permissions["ec2"] = "denied"
+            warnings.append("No ec2:DescribeInstances")
+        else:
+            permissions["ec2"] = "error"
+            warnings.append(f"EC2 check: {error_msg[:60]}")
+
+    # Organizations (optional)
+    try:
+        org = session.client("organizations", region_name="us-east-1")
+        org.describe_organization()
+        permissions["organizations"] = "available"
+    except Exception:
+        permissions["organizations"] = "unavailable"
+
+    return basic_result_to_json(passed, identity, permissions, warnings)
