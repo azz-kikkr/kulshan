@@ -872,66 +872,7 @@ class ScanHistoryRecord:
         )
 
 
-# ---------------------------------------------------------------------------
-# TelemetryEvent (frozen)
-# ---------------------------------------------------------------------------
-
-@dataclass(frozen=True, slots=True)
-class TelemetryEvent:
-    """Opt-in telemetry ping (immutable)."""
-
-    event_type: str
-    command: str
-    suite_version: str
-    python_version: str
-    os_family: str
-    os_release: str
-    success: bool
-    duration_ms: Optional[float] = None
-    error_class: Optional[str] = None
-    tier: Tier = Tier.FREE
-    install_id: str = ""
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "event_type": self.event_type,
-            "command": self.command,
-            "suite_version": self.suite_version,
-            "python_version": self.python_version,
-            "os_family": self.os_family,
-            "os_release": self.os_release,
-            "success": self.success,
-            "duration_ms": self.duration_ms,
-            "error_class": self.error_class,
-            "tier": self.tier.value,
-            "install_id": self.install_id,
-            "timestamp": _ts_to_str(self.timestamp),
-        }
-
-    def to_json_body(self) -> str:
-        """Return a JSON string ready for POST to the telemetry endpoint."""
-        return json.dumps(self.to_dict())
-
-    @classmethod
-    def from_dict(cls, d: Dict[str, Any]) -> TelemetryEvent:
-        return cls(
-            event_type=d["event_type"],
-            command=d["command"],
-            suite_version=d["suite_version"],
-            python_version=d["python_version"],
-            os_family=d["os_family"],
-            os_release=d["os_release"],
-            success=d["success"],
-            duration_ms=d.get("duration_ms"),
-            error_class=d.get("error_class"),
-            tier=Tier(d.get("tier", "free")),
-            install_id=d.get("install_id", ""),
-            timestamp=_str_to_ts(d["timestamp"]),  # type: ignore[arg-type]
-        )
-
-
-# ---------------------------------------------------------------------------
+ # ---------------------------------------------------------------------------
 # CIThresholds
 # ---------------------------------------------------------------------------
 
@@ -998,9 +939,6 @@ class SuiteConfig:
     history_retention_days: int = 365
     history_db_path: Optional[str] = None
 
-    # [telemetry]
-    telemetry_enabled: bool = False
-    crash_reporting: bool = False
 
     # [ci]
     ci_thresholds: CIThresholds = field(default_factory=CIThresholds)
@@ -1027,10 +965,6 @@ class SuiteConfig:
             "history": {
                 "retention_days": self.history_retention_days,
                 "db_path": self.history_db_path,
-            },
-            "telemetry": {
-                "enabled": self.telemetry_enabled,
-                "crash_reporting": self.crash_reporting,
             },
             "ci": self.ci_thresholds.to_dict(),
             "ui": {

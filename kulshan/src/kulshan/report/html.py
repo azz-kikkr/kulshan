@@ -115,6 +115,7 @@ def generate_html_report(
     duration_secs: float,
     top_actions: Optional[List[dict]] = None,
     synthetic_sample: bool = False,
+    coverage: Optional[dict] = None,
 ) -> str:
     """Return a complete self-contained HTML string for the Kulshan Report.
 
@@ -151,6 +152,7 @@ def generate_html_report(
 
     # Synthetic-sample banner: opt-in, default off.
     synthetic_banner_html = _SYNTHETIC_BANNER_HTML if synthetic_sample else ""
+    coverage_html = _build_coverage_summary(coverage)
 
     # Cost Health Score (small, contextual — not a hero dial)
     score_label = "Cost Health Score" if ran_packs == ["cost"] else "Overall Score"
@@ -175,8 +177,28 @@ def generate_html_report(
         spend_trend=spend_trend_html,
         detailed_breakdown=details_html,
         synthetic_banner=synthetic_banner_html,
+        coverage_summary=coverage_html,
     )
 
+
+def _build_coverage_summary(coverage: Optional[dict]) -> str:
+    """Render the canonical coverage disclosure without exposing identifiers."""
+    if not coverage:
+        return '<section class="coverage-section"><h2>Coverage</h2><p>Coverage not recorded.</p></section>'
+    summary = coverage.get("summary", {})
+    status = html.escape(str(summary.get("report_status", "unknown")))
+    completed = int(summary.get("packs_completed", 0))
+    attempted = int(summary.get("packs_attempted", 0))
+    regions = int(summary.get("regions_scanned", 0))
+    denied = len(coverage.get("denied_actions", []))
+    warnings = coverage.get("warnings", [])
+    warning_html = "".join(f"<li>{html.escape(str(item))}</li>" for item in warnings)
+    return (
+        '<section class="coverage-section"><h2>Coverage</h2>'
+        f'<p>Status: <strong>{status}</strong> · {completed}/{attempted} packs · {regions} regions · {denied} denied actions</p>'
+        f'{"<ul>" + warning_html + "</ul>" if warning_html else ""}'
+        '</section>'
+    )
 
 def _build_tool_cards(results: dict) -> str:
     """Build the grid of tool scorecard HTML."""
@@ -1515,6 +1537,8 @@ _HTML_TEMPLATE = """\
 
   <!-- Detailed Breakdown -->
   <h2 class="section-title">Detailed Breakdown</h2>
+  {coverage_summary}
+
   {detailed_breakdown}
 
   <!-- Footer -->

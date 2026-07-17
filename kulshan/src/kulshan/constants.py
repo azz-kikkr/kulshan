@@ -18,4 +18,3 @@ class ExitCode(IntEnum):
 
 # Placeholder endpoints (configured at deploy time; not yet active)
 SIGNING_ENDPOINT: str = "https://api.missionfinops.com/v1/license/sign"
-TELEMETRY_ENDPOINT: str = "https://api.missionfinops.com/v1/telemetry"
