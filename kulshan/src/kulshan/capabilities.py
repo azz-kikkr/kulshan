@@ -290,7 +290,6 @@ def assess_pack_readiness(session: Any, pack: str, cache: dict[tuple[str, str, s
         if cache is not None:
             cache[key] = result
         results.append(result)
-        results.append(probe_capability(session, probe))
 
     available_count = sum(1 for r in results if r.status == "available")
     total = len(results)
