@@ -26,7 +26,6 @@
       "Sid": "CostAnalyzerAccountNames",
       "Effect": "Allow",
       "Action": [
-        "organizations:DescribeOrganization",
         "organizations:ListAccounts"
       ],
       "Resource": "*"

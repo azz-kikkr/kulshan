@@ -62,10 +62,10 @@ def test_composed_policy_exists():
     assert COMPOSED_PATH.exists(), f"missing composed policy at {COMPOSED_PATH}"
 
 
-def test_per_check_dir_has_ten_files():
+def test_per_check_dir_has_expected_files():
     files = _per_check_files()
-    assert len(files) == 10, (
-        f"expected 10 per-check policies, got {len(files)}: {[f.name for f in files]}"
+    assert len(files) == 11, (
+        f"expected 11 per-check policies, got {len(files)}: {[f.name for f in files]}"
     )
 
 
@@ -109,12 +109,18 @@ def test_no_write_actions_anywhere(policy_file: Path):
 
 
 def test_no_write_access_level_in_baseline():
-    """No action with baseline_eligible: true should have aws_access_level: Write."""
+    """No action with baseline_eligible: true should have aws_access_level: Write,
+    except actions explicitly documented as non-mutating despite Write classification."""
     registry = _load_registry()
+    # Actions that AWS classifies as Write but do not modify resources.
+    # cloudformation:DetectStackDrift starts a drift assessment but changes nothing.
+    WRITE_LEVEL_ALLOWLIST = {"cloudformation:DetectStackDrift"}
     violations = [
         entry["iam_action"]
         for entry in registry["actions"]
-        if entry.get("baseline_eligible") and entry.get("aws_access_level") == "Write"
+        if entry.get("baseline_eligible")
+        and entry.get("aws_access_level") == "Write"
+        and entry["iam_action"] not in WRITE_LEVEL_ALLOWLIST
     ]
     assert not violations, (
         f"Baseline-eligible actions must not have Write access level: {violations}"

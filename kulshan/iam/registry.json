@@ -2,14 +2,108 @@
   "version": "1.0",
   "actions": [
     {
+      "iam_action": "access-analyzer:GetAnalyzer",
+      "boto3_method": "accessanalyzer.get_analyzer",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "access-analyzer:GetFinding",
+      "boto3_method": "accessanalyzer.get_finding",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "access-analyzer:ListAnalyzers",
+      "boto3_method": "accessanalyzer.list_analyzers",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "access-analyzer:ListFindings",
+      "boto3_method": "accessanalyzer.list_findings",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "acm:DescribeCertificate",
+      "boto3_method": "acm.describe_certificate",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "acm:ListCertificates",
+      "boto3_method": "acm.list_certificates",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "autoscaling:DescribeAutoScalingGroups",
+      "boto3_method": "autoscaling.describe_auto_scaling_groups",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "dr",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "backup:DescribeRecoveryPoint",
+      "boto3_method": "backup.describe_recovery_point",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "dr",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "backup:ListBackupPlans",
+      "boto3_method": "backup.list_backup_plans",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "dr",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "backup:ListBackupVaults",
+      "boto3_method": "backup.list_backup_vaults",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "dr",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "backup:ListProtectedResources",
+      "boto3_method": "backup.list_protected_resources",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "dr",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "backup:ListRecoveryPointsByBackupVault",
+      "boto3_method": "backup.list_recovery_points_by_backup_vault",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "dr",
+      "baseline_eligible": true
+    },
+    {
       "iam_action": "bcm-data-exports:GetExport",
       "boto3_method": "bcm-data-exports.get_export",
       "aws_access_level": "Read",
       "status": "required",
       "capability": "cost",
-      "baseline_eligible": true,
-      "source_file": "src/kulshan/cur/discovery.py",
-      "behavior_when_denied": "silent_omission"
+      "baseline_eligible": true
     },
     {
       "iam_action": "bcm-data-exports:ListExports",
@@ -17,9 +111,263 @@
       "aws_access_level": "List",
       "status": "required",
       "capability": "cost",
-      "baseline_eligible": true,
-      "source_file": "src/kulshan/cur/discovery.py",
-      "behavior_when_denied": "silent_omission"
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "budgets:DescribeBudgets",
+      "boto3_method": "budgets.describe_budgets",
+      "aws_access_level": "Read",
+      "status": "optional",
+      "capability": "cost",
+      "baseline_eligible": false
+    },
+    {
+      "iam_action": "budgets:DescribeNotificationsForBudget",
+      "boto3_method": "budgets.describe_notifications_for_budget",
+      "aws_access_level": "Read",
+      "status": "optional",
+      "capability": "cost",
+      "baseline_eligible": false
+    },
+    {
+      "iam_action": "budgets:DescribeSubscribersForNotification",
+      "boto3_method": "budgets.describe_subscribers_for_notification",
+      "aws_access_level": "Read",
+      "status": "optional",
+      "capability": "cost",
+      "baseline_eligible": false
+    },
+    {
+      "iam_action": "ce:GetAnomalies",
+      "boto3_method": "ce.get_anomalies",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "cost",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "ce:GetAnomalyMonitors",
+      "boto3_method": "ce.get_anomaly_monitors",
+      "aws_access_level": "Read",
+      "status": "optional",
+      "capability": "cost",
+      "baseline_eligible": false
+    },
+    {
+      "iam_action": "ce:GetAnomalySubscriptions",
+      "boto3_method": "ce.get_anomaly_subscriptions",
+      "aws_access_level": "Read",
+      "status": "optional",
+      "capability": "cost",
+      "baseline_eligible": false
+    },
+    {
+      "iam_action": "ce:GetCostAndUsage",
+      "boto3_method": "ce.get_cost_and_usage",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "cost",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "ce:GetCostAndUsageComparisons",
+      "boto3_method": "ce.get_cost_and_usage_comparisons",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "cost",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "ce:GetCostAndUsageWithResources",
+      "boto3_method": "ce.get_cost_and_usage_with_resources",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "cost",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "ce:GetCostComparisonDrivers",
+      "boto3_method": "ce.get_cost_comparison_drivers",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "cost",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "ce:GetCostForecast",
+      "boto3_method": "ce.get_cost_forecast",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "cost",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "ce:GetReservationCoverage",
+      "boto3_method": "ce.get_reservation_coverage",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "cost",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "ce:GetReservationPurchaseRecommendation",
+      "boto3_method": "ce.get_reservation_purchase_recommendation",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "cost",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "ce:GetReservationUtilization",
+      "boto3_method": "ce.get_reservation_utilization",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "cost",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "ce:GetRightsizingRecommendation",
+      "boto3_method": "ce.get_rightsizing_recommendation",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "cost",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "ce:GetSavingsPlansPurchaseRecommendation",
+      "boto3_method": "ce.get_savings_plans_purchase_recommendation",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "cost",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "ce:GetSavingsPlansUtilization",
+      "boto3_method": "ce.get_savings_plans_utilization",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "cost",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "ce:GetTags",
+      "boto3_method": "ce.get_tags",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "cost",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "cloudformation:DescribeStackDriftDetectionStatus",
+      "boto3_method": "cloudformation.describe_stack_drift_detection_status",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "drift",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "cloudformation:DescribeStackResourceDrifts",
+      "boto3_method": "cloudformation.describe_stack_resource_drifts",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "drift",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "cloudformation:DetectStackDrift",
+      "boto3_method": "cloudformation.detect_stack_drift",
+      "aws_access_level": "Write",
+      "status": "required",
+      "capability": "drift",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "cloudformation:ListStackResources",
+      "boto3_method": "cloudformation.list_stack_resources",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "drift",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "cloudformation:ListStacks",
+      "boto3_method": "cloudformation.list_stacks",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "drift",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "cloudtrail:DescribeTrails",
+      "boto3_method": "cloudtrail.describe_trails",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "cloudtrail:GetEventSelectors",
+      "boto3_method": "cloudtrail.get_event_selectors",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "cloudtrail:GetTrailStatus",
+      "boto3_method": "cloudtrail.get_trail_status",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "cloudtrail:ListTrails",
+      "boto3_method": "cloudtrail.list_trails",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "cloudtrail:LookupEvents",
+      "boto3_method": "cloudtrail.lookup_events",
+      "aws_access_level": "Read",
+      "status": "optional",
+      "capability": "security",
+      "baseline_eligible": false
+    },
+    {
+      "iam_action": "cloudwatch:DescribeAlarms",
+      "boto3_method": "cloudwatch.describe_alarms",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "pulse",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "cloudwatch:GetMetricStatistics",
+      "boto3_method": "cloudwatch.get_metric_statistics",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "pulse",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "cloudwatch:ListMetrics",
+      "boto3_method": "cloudwatch.list_metrics",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "pulse",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "config:DescribeConfigRules",
+      "boto3_method": "config.describe_config_rules",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
     },
     {
       "iam_action": "config:DescribeConfigurationRecorderStatus",
@@ -27,9 +375,151 @@
       "aws_access_level": "List",
       "status": "required",
       "capability": "security",
-      "baseline_eligible": true,
-      "source_file": "checks/security/scanner/logging_monitor.py",
-      "behavior_when_denied": "silent_omission"
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "config:DescribeConfigurationRecorders",
+      "boto3_method": "config.describe_configuration_recorders",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "config:DescribeDeliveryChannels",
+      "boto3_method": "config.describe_delivery_channels",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "dynamodb:DescribeContinuousBackups",
+      "boto3_method": "dynamodb.describe_continuous_backups",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "dr",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "dynamodb:DescribeTable",
+      "boto3_method": "dynamodb.describe_table",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "dr",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "dynamodb:ListTables",
+      "boto3_method": "dynamodb.list_tables",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "dr",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "dynamodb:ListTagsOfResource",
+      "boto3_method": "dynamodb.list_tags_of_resource",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "dr",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "ec2:DescribeAddresses",
+      "boto3_method": "ec2.describe_addresses",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "ec2:DescribeAvailabilityZones",
+      "boto3_method": "ec2.describe_availability_zones",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "ec2:DescribeFlowLogs",
+      "boto3_method": "ec2.describe_flow_logs",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "ec2:DescribeImages",
+      "boto3_method": "ec2.describe_images",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "ec2:DescribeInstances",
+      "boto3_method": "ec2.describe_instances",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "ec2:DescribeInternetGateways",
+      "boto3_method": "ec2.describe_internet_gateways",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "ec2:DescribeNatGateways",
+      "boto3_method": "ec2.describe_nat_gateways",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "ec2:DescribeNetworkAcls",
+      "boto3_method": "ec2.describe_network_acls",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "ec2:DescribeNetworkInterfaces",
+      "boto3_method": "ec2.describe_network_interfaces",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "ec2:DescribeRegions",
+      "boto3_method": "ec2.describe_regions",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "ec2:DescribeRouteTables",
+      "boto3_method": "ec2.describe_route_tables",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "ec2:DescribeSecurityGroups",
+      "boto3_method": "ec2.describe_security_groups",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
     },
     {
       "iam_action": "ec2:DescribeSnapshotAttribute",
@@ -37,9 +527,223 @@
       "aws_access_level": "List",
       "status": "required",
       "capability": "security",
-      "baseline_eligible": true,
-      "source_file": "checks/security/scanner/data.py",
-      "behavior_when_denied": "silent_omission"
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "ec2:DescribeSnapshots",
+      "boto3_method": "ec2.describe_snapshots",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "ec2:DescribeSubnets",
+      "boto3_method": "ec2.describe_subnets",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "ec2:DescribeTransitGatewayAttachments",
+      "boto3_method": "ec2.describe_transit_gateway_attachments",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "ec2:DescribeTransitGateways",
+      "boto3_method": "ec2.describe_transit_gateways",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "ec2:DescribeVolumes",
+      "boto3_method": "ec2.describe_volumes",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "ec2:DescribeVpcEndpoints",
+      "boto3_method": "ec2.describe_vpc_endpoints",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "ec2:DescribeVpcPeeringConnections",
+      "boto3_method": "ec2.describe_vpc_peering_connections",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "ec2:DescribeVpcs",
+      "boto3_method": "ec2.describe_vpcs",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "ec2:DescribeVpnConnections",
+      "boto3_method": "ec2.describe_vpn_connections",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "ecr:DescribeRepositories",
+      "boto3_method": "ecr.describe_repositories",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "sweep",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "ecr:ListImages",
+      "boto3_method": "ecr.list_images",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "sweep",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "ecs:DescribeClusters",
+      "boto3_method": "ecs.describe_clusters",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "sweep",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "ecs:DescribeServices",
+      "boto3_method": "ecs.describe_services",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "sweep",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "ecs:ListClusters",
+      "boto3_method": "ecs.list_clusters",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "sweep",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "ecs:ListServices",
+      "boto3_method": "ecs.list_services",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "sweep",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "eks:DescribeCluster",
+      "boto3_method": "eks.describe_cluster",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "eks:ListClusters",
+      "boto3_method": "eks.list_clusters",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "elasticache:DescribeCacheClusters",
+      "boto3_method": "elasticache.describe_cache_clusters",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "dr",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "elasticache:DescribeReplicationGroups",
+      "boto3_method": "elasticache.describe_replication_groups",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "dr",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "elasticloadbalancing:DescribeLoadBalancers",
+      "boto3_method": "elbv2.describe_load_balancers",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "sweep",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "elasticloadbalancing:DescribeTags",
+      "boto3_method": "elbv2.describe_tags",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "sweep",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "elasticloadbalancing:DescribeTargetGroups",
+      "boto3_method": "elbv2.describe_target_groups",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "sweep",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "elasticloadbalancing:DescribeTargetHealth",
+      "boto3_method": "elbv2.describe_target_health",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "sweep",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "guardduty:GetDetector",
+      "boto3_method": "guardduty.get_detector",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "guardduty:GetFindings",
+      "boto3_method": "guardduty.get_findings",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "guardduty:ListDetectors",
+      "boto3_method": "guardduty.list_detectors",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "guardduty:ListFindings",
+      "boto3_method": "guardduty.list_findings",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
     },
     {
       "iam_action": "iam:GenerateCredentialReport",
@@ -47,9 +751,7 @@
       "aws_access_level": "Read",
       "status": "required",
       "capability": "security",
-      "baseline_eligible": true,
-      "source_file": "checks/security/scanner/iam.py",
-      "behavior_when_denied": "silent_omission"
+      "baseline_eligible": true
     },
     {
       "iam_action": "iam:GenerateServiceLastAccessedDetails",
@@ -57,19 +759,31 @@
       "aws_access_level": "Read",
       "status": "required",
       "capability": "security",
-      "baseline_eligible": true,
-      "source_file": "checks/security/scanner/iam.py",
-      "behavior_when_denied": "silent_omission"
+      "baseline_eligible": true
     },
     {
       "iam_action": "iam:GetAccountAuthorizationDetails",
       "boto3_method": "iam.get_account_authorization_details",
-      "aws_access_level": "List",
+      "aws_access_level": "Read",
       "status": "required",
       "capability": "security",
-      "baseline_eligible": true,
-      "source_file": "checks/security/scanner/iam.py",
-      "behavior_when_denied": "silent_omission"
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "iam:GetAccountPasswordPolicy",
+      "boto3_method": "iam.get_account_password_policy",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "iam:GetAccountSummary",
+      "boto3_method": "iam.get_account_summary",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
     },
     {
       "iam_action": "iam:GetCredentialReport",
@@ -77,9 +791,31 @@
       "aws_access_level": "Read",
       "status": "required",
       "capability": "security",
-      "baseline_eligible": true,
-      "source_file": "checks/security/scanner/iam.py",
-      "behavior_when_denied": "silent_omission"
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "iam:GetPolicy",
+      "boto3_method": "iam.get_policy",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "iam:GetPolicyVersion",
+      "boto3_method": "iam.get_policy_version",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "iam:GetRole",
+      "boto3_method": "iam.get_role",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
     },
     {
       "iam_action": "iam:GetServiceLastAccessedDetails",
@@ -87,19 +823,255 @@
       "aws_access_level": "Read",
       "status": "required",
       "capability": "security",
-      "baseline_eligible": true,
-      "source_file": "checks/security/scanner/iam.py",
-      "behavior_when_denied": "silent_omission"
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "iam:GetUser",
+      "boto3_method": "iam.get_user",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "iam:ListAccessKeys",
+      "boto3_method": "iam.list_access_keys",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "iam:ListAccountAliases",
+      "boto3_method": "iam.list_account_aliases",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "iam:ListAttachedGroupPolicies",
+      "boto3_method": "iam.list_attached_group_policies",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "iam:ListAttachedRolePolicies",
+      "boto3_method": "iam.list_attached_role_policies",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "iam:ListAttachedUserPolicies",
+      "boto3_method": "iam.list_attached_user_policies",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "iam:ListGroups",
+      "boto3_method": "iam.list_groups",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "iam:ListMFADevices",
+      "boto3_method": "iam.list_mfa_devices",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "iam:ListPolicies",
+      "boto3_method": "iam.list_policies",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "iam:ListRoles",
+      "boto3_method": "iam.list_roles",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "iam:ListUsers",
+      "boto3_method": "iam.list_users",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "iam:ListVirtualMFADevices",
+      "boto3_method": "iam.list_virtual_mfa_devices",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "kms:Decrypt",
+      "boto3_method": "kms.decrypt",
+      "aws_access_level": "Write",
+      "status": "optional",
+      "capability": "cur-s3",
+      "baseline_eligible": false
+    },
+    {
+      "iam_action": "kms:DescribeKey",
+      "boto3_method": "kms.describe_key",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "kms:GetKeyPolicy",
+      "boto3_method": "kms.get_key_policy",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "kms:GetKeyRotationStatus",
+      "boto3_method": "kms.get_key_rotation_status",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "kms:ListAliases",
+      "boto3_method": "kms.list_aliases",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "kms:ListKeys",
+      "boto3_method": "kms.list_keys",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "lambda:GetAccountSettings",
+      "boto3_method": "lambda.get_account_settings",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "lambda:GetFunction",
+      "boto3_method": "lambda.get_function",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "lambda:GetFunctionConfiguration",
+      "boto3_method": "lambda.get_function_configuration",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "lambda:GetPolicy",
+      "boto3_method": "lambda.get_policy",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "lambda:ListFunctions",
+      "boto3_method": "lambda.list_functions",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "lambda:ListTags",
+      "boto3_method": "lambda.list_tags",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "logs:DescribeLogGroups",
+      "boto3_method": "logs.describe_log_groups",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "pulse",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "logs:DescribeMetricFilters",
+      "boto3_method": "logs.describe_metric_filters",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "pulse",
+      "baseline_eligible": true
     },
     {
       "iam_action": "organizations:DescribeOrganization",
       "boto3_method": "organizations.describe_organization",
-      "aws_access_level": "Read",
+      "aws_access_level": "List",
       "status": "required",
-      "capability": "cost",
-      "baseline_eligible": true,
-      "source_file": "src/kulshan/preflight.py",
-      "behavior_when_denied": "silent_omission"
+      "capability": "core",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "organizations:ListAccounts",
+      "boto3_method": "organizations.list_accounts",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "core",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "rds:DescribeDBClusters",
+      "boto3_method": "rds.describe_db_clusters",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "rds:DescribeDBEngineVersions",
+      "boto3_method": "rds.describe_db_engine_versions",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "rds:DescribeDBInstances",
+      "boto3_method": "rds.describe_db_instances",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
     },
     {
       "iam_action": "rds:DescribeDBSnapshotAttributes",
@@ -107,9 +1079,175 @@
       "aws_access_level": "List",
       "status": "required",
       "capability": "security",
-      "baseline_eligible": true,
-      "source_file": "checks/security/scanner/data.py",
-      "behavior_when_denied": "silent_omission"
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "rds:DescribeDBSnapshots",
+      "boto3_method": "rds.describe_db_snapshots",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "rds:DescribeDBSubnetGroups",
+      "boto3_method": "rds.describe_db_subnet_groups",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "rds:ListTagsForResource",
+      "boto3_method": "rds.list_tags_for_resource",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "route53:ListHealthChecks",
+      "boto3_method": "route53.list_health_checks",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "dr",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "route53:ListHostedZones",
+      "boto3_method": "route53.list_hosted_zones",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "dr",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "route53:ListResourceRecordSets",
+      "boto3_method": "route53.list_resource_record_sets",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "dr",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "s3:GetAccountPublicAccessBlock",
+      "boto3_method": "s3.get_public_access_block",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "s3:GetBucketAcl",
+      "boto3_method": "s3.get_bucket_acl",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "s3:GetBucketEncryption",
+      "boto3_method": "s3.get_bucket_encryption",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "s3:GetBucketLifecycleConfiguration",
+      "boto3_method": "s3.get_bucket_lifecycle_configuration",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "s3:GetBucketLocation",
+      "boto3_method": "s3.get_bucket_location",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "s3:GetBucketLogging",
+      "boto3_method": "s3.get_bucket_logging",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "s3:GetBucketPolicy",
+      "boto3_method": "s3.get_bucket_policy",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "s3:GetBucketPolicyStatus",
+      "boto3_method": "s3.get_bucket_policy_status",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "s3:GetBucketPublicAccessBlock",
+      "boto3_method": "s3.get_public_access_block",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "s3:GetBucketReplication",
+      "boto3_method": "s3.get_bucket_replication",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "s3:GetBucketTagging",
+      "boto3_method": "s3.get_bucket_tagging",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "s3:GetBucketVersioning",
+      "boto3_method": "s3.get_bucket_versioning",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "s3:GetObject",
+      "boto3_method": "s3.get_object",
+      "aws_access_level": "Read",
+      "status": "optional",
+      "capability": "cur-s3",
+      "baseline_eligible": false
+    },
+    {
+      "iam_action": "s3:ListAllMyBuckets",
+      "boto3_method": "s3.list_buckets",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "s3:ListBucket",
+      "boto3_method": "s3.list_objects_v2",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "security",
+      "baseline_eligible": true
     },
     {
       "iam_action": "secretsmanager:ListSecrets",
@@ -117,9 +1255,47 @@
       "aws_access_level": "List",
       "status": "required",
       "capability": "security",
-      "baseline_eligible": true,
-      "source_file": "checks/security/scanner/encryption.py",
-      "behavior_when_denied": "silent_omission"
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "servicequotas:GetServiceQuota",
+      "boto3_method": "servicequotas.get_service_quota",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "limit",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "servicequotas:ListRequestedServiceQuotaChangeHistory",
+      "boto3_method": "servicequotas.list_requested_service_quota_change_history",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "limit",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "servicequotas:ListServiceQuotas",
+      "boto3_method": "servicequotas.list_service_quotas",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "limit",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "servicequotas:ListServices",
+      "boto3_method": "servicequotas.list_services",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "limit",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "sns:ListTopics",
+      "boto3_method": "sns.list_topics",
+      "aws_access_level": "List",
+      "status": "required",
+      "capability": "pulse",
+      "baseline_eligible": true
     },
     {
       "iam_action": "sts:AssumeRole",
@@ -127,9 +1303,47 @@
       "aws_access_level": "Write",
       "status": "cross_account",
       "capability": "multi-account",
-      "baseline_eligible": false,
-      "source_file": "src/kulshan/aws_runtime.py",
-      "behavior_when_denied": "hard_failure"
+      "baseline_eligible": false
+    },
+    {
+      "iam_action": "sts:GetCallerIdentity",
+      "boto3_method": "sts.get_caller_identity",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "core",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "tag:GetResources",
+      "boto3_method": "resourcegroupstaggingapi.get_resources",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "tag",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "tag:GetTagKeys",
+      "boto3_method": "resourcegroupstaggingapi.get_tag_keys",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "tag",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "tag:GetTagValues",
+      "boto3_method": "resourcegroupstaggingapi.get_tag_values",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "tag",
+      "baseline_eligible": true
+    },
+    {
+      "iam_action": "xray:GetGroups",
+      "boto3_method": "xray.get_groups",
+      "aws_access_level": "Read",
+      "status": "required",
+      "capability": "pulse",
+      "baseline_eligible": true
     }
   ]
 }
