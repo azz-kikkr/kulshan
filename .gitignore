@@ -140,3 +140,9 @@ kulshan/kulshan-full-test.json
 kulshan/kulshan-test-report.json
 kulshan-full-report.json
 kulshan-report-*.html
+
+# --- Audit harness scratch ---
+.audit-venv/
+.audit-tmp/
+kulshan/.audit-tmp/
+
