@@ -5,18 +5,20 @@
       "Sid": "CostAnalyzerReadOnly",
       "Effect": "Allow",
       "Action": [
+        "bcm-data-exports:GetExport",
+        "bcm-data-exports:ListExports",
+        "ce:GetAnomalies",
         "ce:GetCostAndUsage",
-        "ce:GetCostAndUsageWithResources",
-        "ce:GetCostForecast",
         "ce:GetCostAndUsageComparisons",
+        "ce:GetCostAndUsageWithResources",
         "ce:GetCostComparisonDrivers",
+        "ce:GetCostForecast",
         "ce:GetReservationCoverage",
-        "ce:GetReservationUtilization",
         "ce:GetReservationPurchaseRecommendation",
-        "ce:GetSavingsPlansUtilization",
-        "ce:GetSavingsPlansPurchaseRecommendation",
+        "ce:GetReservationUtilization",
         "ce:GetRightsizingRecommendation",
-        "ce:GetAnomalies"
+        "ce:GetSavingsPlansPurchaseRecommendation",
+        "ce:GetSavingsPlansUtilization"
       ],
       "Resource": "*"
     },
@@ -24,6 +26,7 @@
       "Sid": "CostAnalyzerAccountNames",
       "Effect": "Allow",
       "Action": [
+        "organizations:DescribeOrganization",
         "organizations:ListAccounts"
       ],
       "Resource": "*"

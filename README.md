@@ -69,9 +69,9 @@ kulshan report --packs all --regions us-east-1    # full diagnostic
 
 ## Trust and Security
 
-> Read-only by construction, not read-only by default. There is no cleanup mode to leave off, no write path to enable. The published IAM policy contains zero actions that create, modify, or delete resources.
+> Read-only by construction, not read-only by default. There is no cleanup mode to leave off, no write path to enable. The published IAM policy contains zero actions that create, modify, or delete AWS resources.
 
-- 147 read-only actions, zero write actions. [Read every line.](kulshan/iam/kulshan-readonly.json)
+- 159 read-only actions, zero write actions. [Read every line.](kulshan/iam/kulshan-readonly.json)
 - Reports stay on your machine
 - No telemetry, no phone-home
 - Open source: Apache 2.0. IAM policy additionally CC BY 4.0.

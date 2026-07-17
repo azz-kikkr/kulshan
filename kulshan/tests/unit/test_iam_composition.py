@@ -7,6 +7,7 @@ composed policy being regenerated, this fails.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -16,6 +17,8 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 IAM_DIR = REPO_ROOT / "kulshan" / "iam"
 COMPOSED_PATH = IAM_DIR / "kulshan-readonly.json"
 PER_CHECK_DIR = IAM_DIR / "per-check"
+REGISTRY_PATH = IAM_DIR / "registry.json"
+HASH_PATH = IAM_DIR / "policy-hash.txt"
 
 WRITE_VERBS = ("Put", "Delete", "Create", "Modify", "Terminate", "Detach", "Attach", "Update")
 
@@ -46,6 +49,13 @@ def _is_write_action(action: str) -> bool:
 
 def _per_check_files() -> list[Path]:
     return sorted(PER_CHECK_DIR.glob("*.json"))
+
+
+def _load_registry() -> dict:
+    return json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
+
+
+# ─── Existing tests ───────────────────────────────────────────────────────────
 
 
 def test_composed_policy_exists():
@@ -93,3 +103,60 @@ def test_no_write_actions_anywhere(policy_file: Path):
     actions = _actions(json.loads(policy_file.read_text(encoding="utf-8")))
     bad = [a for a in actions if _is_write_action(a)]
     assert not bad, f"{policy_file.name} contains write actions: {bad}"
+
+
+# ─── New tests (Commit 3) ─────────────────────────────────────────────────────
+
+
+def test_no_write_access_level_in_baseline():
+    """No action with baseline_eligible: true should have aws_access_level: Write."""
+    registry = _load_registry()
+    violations = [
+        entry["iam_action"]
+        for entry in registry["actions"]
+        if entry.get("baseline_eligible") and entry.get("aws_access_level") == "Write"
+    ]
+    assert not violations, (
+        f"Baseline-eligible actions must not have Write access level: {violations}"
+    )
+
+
+def test_sts_assume_role_absent_from_baseline():
+    """sts:AssumeRole must NOT be in the composed baseline policy."""
+    composed = json.loads(COMPOSED_PATH.read_text(encoding="utf-8"))
+    composed_actions = _actions(composed)
+    assert "sts:AssumeRole" not in composed_actions, (
+        "sts:AssumeRole should not be in the baseline policy"
+    )
+
+
+def test_registry_actions_present_in_policy():
+    """Every registry action with baseline_eligible=true and status=required must
+    be in the composed policy."""
+    registry = _load_registry()
+    composed = json.loads(COMPOSED_PATH.read_text(encoding="utf-8"))
+    composed_actions = _actions(composed)
+
+    missing = [
+        entry["iam_action"]
+        for entry in registry["actions"]
+        if entry.get("baseline_eligible") and entry.get("status") == "required"
+        and entry["iam_action"] not in composed_actions
+    ]
+    assert not missing, (
+        f"Registry actions missing from composed policy: {missing}"
+    )
+
+
+def test_policy_hash_matches_recorded():
+    """SHA256 of the composed policy must match the recorded hash."""
+    content = COMPOSED_PATH.read_bytes()
+    actual_hash = hashlib.sha256(content).hexdigest()
+    expected_hash = HASH_PATH.read_text(encoding="utf-8").strip()
+    assert actual_hash == expected_hash, (
+        f"Policy hash mismatch.\n  Expected: {expected_hash}\n  Actual:   {actual_hash}\n"
+        "Regenerate with: python kulshan/iam/compose.py && "
+        "python -c \"import hashlib; from pathlib import Path; "
+        "print(hashlib.sha256(Path('kulshan/iam/kulshan-readonly.json').read_bytes()).hexdigest())\" "
+        "> kulshan/iam/policy-hash.txt"
+    )
