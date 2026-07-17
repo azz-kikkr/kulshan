@@ -64,6 +64,7 @@ def _emit_output(
     show_pii: bool,
     console: Console,
     history_db_path: Optional[str] = None,
+    coverage: Optional[dict] = None,
 ) -> None:
     """Shared output dispatch for report and convert commands."""
     from kulshan.redact import redact_account_id, redact_payload, redact_filename
@@ -101,6 +102,7 @@ def _emit_output(
             "overall_score": overall_score,
             "overall_grade": overall_grade,
             "scan_metadata": scan_metadata,
+            "coverage": coverage,
             "tools": results,
             "findings": all_findings,
             "top_actions": top_actions,
@@ -146,6 +148,20 @@ def _emit_output(
             top_actions=top_actions,
             history_db_path=history_db_path,
         )
+        # Coverage summary
+        if coverage:
+            summary = coverage.get("summary", {})
+            status = summary.get("report_status", "complete")
+            packs_str = f"{summary.get('packs_completed', 0)}/{summary.get('packs_attempted', 0)} packs"
+            regions_str = f"{summary.get('regions_scanned', 0)} regions"
+            denied = coverage.get("denied_actions", [])
+            if status == "complete":
+                console.print(f"  [dim]Coverage: {packs_str}, {regions_str}[/dim]")
+            elif status == "partial":
+                console.print(f"  [yellow]Coverage: {packs_str}, {regions_str}, {len(denied)} denied[/yellow]")
+            else:
+                console.print(f"  [red]Coverage: {packs_str}, {regions_str} (incomplete)[/red]")
+            console.print()
 
 
 def _offer_reconciliation_if_needed(ws_ctx, payer_account_id, console) -> None:
@@ -943,6 +959,13 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
         except Exception:
             pass  # History is best-effort, never block the report
 
+    # Build coverage report
+    from kulshan.coverage import build_coverage_from_results
+    coverage_report = build_coverage_from_results(
+        results=results, regions=regions,
+        duration_seconds=duration, account_id=account_id,
+    )
+
     _emit_output(
         fmt=fmt, results=results, overall_score=overall_score,
         overall_grade=overall_grade, account_id=account_id,
@@ -950,6 +973,7 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
         all_findings=all_findings, output=output, show_pii=show_pii,
         scan_metadata=scan_metadata, console=console,
         history_db_path=ws_ctx.history_db_path,
+        coverage=coverage_report.to_dict(),
     )
 
     # Auto-save HTML report (redacted by default) unless user already exported HTML
