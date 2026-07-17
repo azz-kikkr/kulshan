@@ -33,7 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - README rewritten: full v0.3 feature coverage, all links absolute for PyPI rendering
 - Documentation suite: 9 focused guides (getting started, CLI reference, audit packs, workspaces, output formats, MCP, CI/CD, security/IAM, architecture, contributing)
-- Consolidated docs from 16 files to 9 (merged configuration, troubleshooting, CUR investigation, security+IAM)
+- Consolidated docs from 16 files to 9 (merged configuration, troubleshooting, CUR analysis, security+IAM)
 
 ## [0.3.0] - 2026-07-15
 
@@ -72,13 +72,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.2.3] - 2026-07-13
 
 ### Fixed
-- Cost column selection now uses null-aware probing in `investigate cost --path`, matching `cur validate` behavior
-- Previously, `investigate cost` would fail with "No cost data found" when `line_item_net_unblended_cost` column existed but was all NULL (common in many CUR exports)
+- Cost column selection now uses null-aware probing in `analyze cost --path`, matching `cur validate` behavior
+- Previously, `analyze cost` would fail with "No cost data found" when `line_item_net_unblended_cost` column existed but was all NULL (common in many CUR exports)
 - Now correctly falls back to `line_item_unblended_cost` (or next available) when preferred column has no data
 - `cost_basis.fallback_note` in JSON output now correctly reflects when a fallback column was used
 
 ### Changed
-- Unified cost column selection logic: `cur validate` and `investigate cost` now use the same shared `select_nonnull_cost_column()` function
+- Unified cost column selection logic: `cur validate` and `analyze cost` now use the same shared `select_nonnull_cost_column()` function
 - Added `COST_COLUMN_CANDIDATES` constant to `kulshan.cur.schema` for consistent column preference order
 - `CurColumnMapping` dataclass now includes `cost_fallback_note` field to track fallback selection
 
@@ -90,17 +90,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.2.1] - 2026-07-13
 
 ### Added
-- Local CUR cost investigation (`kulshan investigate cost --path`) for multi-service top-mover detection
+- Local CUR cost investigation (`kulshan analyze cost --path`) for multi-service top-mover detection
 - Generic `export_brief()` function for unified JSON/markdown/terminal output across all investigation types
 - Full provenance on all investigation outputs (schema_version, kulshan_version, generated_at, data_through)
 - Structured confidence assessment (label, source_agreement, data_completeness, ownership_confidence)
 - Owner candidate inference with explicit `confirmation_required` flag
 - Evidence items with unique IDs for traceability
-- Suggested deep dives based on top movers (e.g., "kulshan investigate ec2" when EC2 is top mover)
+- Suggested deep dives based on top movers (e.g., "kulshan analyze ec2" when EC2 is top mover)
 - Review questions tailored to cost movement direction
 
 ### Changed
-- `investigate cost` command now supports both `--path` (local) and `--s3` (remote) sources
+- `analyze cost` command now supports both `--path` (local) and `--s3` (remote) sources
 - All investigation briefs now include `human_review_required: true`
 
 ### Design Decisions
@@ -114,11 +114,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Local CUR/Data Export schema inspection (`kulshan cur schema --path`)
 - Local CUR/Data Export validation (`kulshan cur validate --path`)
-- Local EC2 investigation brief with period-over-period delta analysis (`kulshan investigate ec2 --cur --month`)
+- Local EC2 investigation brief with period-over-period delta analysis (`kulshan analyze ec2 --cur --month`)
 - Account, region, resource, and usage-type delta breakdowns in EC2 investigation
 - Tag coverage analysis (owner, team, application, cost center, environment tags)
 - S3 readiness check for CUR/Data Export prefixes (`kulshan cur s3-check --s3`)
-- S3-native cost investigation via DuckDB httpfs (`kulshan investigate cost --s3 --month`)
+- S3-native cost investigation via DuckDB httpfs (`kulshan analyze cost --s3 --month`)
 - Scan byte estimation with user confirmation threshold for S3 queries
 - JSON and Markdown export for investigation commands (`--output file.json` or `--output file.md`)
 

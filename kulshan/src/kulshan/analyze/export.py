@@ -1,4 +1,4 @@
-"""Export helpers for deterministic investigation results."""
+"""Export helpers for deterministic analysis results."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Union
 
 from kulshan.cur.s3_query import CostInvestigationResult
-from kulshan.investigate.models import (
+from kulshan.analyze.models import (
     CostInvestigationBrief,
     DeltaRow,
     Ec2InvestigationBrief,

@@ -258,7 +258,7 @@ def main(
             "[bold]Kulshan[/bold] — local-first AWS FinOps baseline\n"
             "[dim]Read-only. Local reports. No SaaS. No telemetry.[/dim]\n\n"
             "[bold]Get started:[/bold]\n"
-            "  [green]kulshan doctor[/green]              Check AWS connectivity\n"
+            "  [green]kulshan preflight[/green]            Check AWS connectivity\n"
             "  [green]kulshan report[/green]              90-day cost baseline (default)\n"
             "  [green]kulshan report -o report.html[/green]   Save as HTML\n\n"
             "[bold]Add more packs:[/bold]\n"
@@ -774,9 +774,9 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
 
     # Pack selection already resolved above
 
-    # ── CUR-only mode: skip CE, run CUR investigation directly ───────────
+    # ── CUR-only mode: skip CE, run CUR analysis directly ───────────
     if use_cur == "only":
-        from kulshan.cur.s3_query import connect_s3_duckdb, investigate_cost_s3
+        from kulshan.cur.s3_query import connect_s3_duckdb, analyze_cost_s3
         from kulshan.cur.manifest_reader import read_manifest_uri
         from datetime import date
         
@@ -784,15 +784,15 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
         start = time.time()
         
         try:
-            # Determine current month for investigation
+            # Determine current month for analysis
             current_month = date.today().strftime("%Y-%m")
             
             # Connect to S3 and read manifest
             con = connect_s3_duckdb()
             manifest = read_manifest_uri(cur_s3_uri, billing_period=current_month)
             
-            # Run CUR investigation from S3
-            brief = investigate_cost_s3(con, manifest, current_month)
+            # Run CUR analysis from S3
+            brief = analyze_cost_s3(con, manifest, current_month)
             con.close()
             duration = time.time() - start
             
@@ -888,10 +888,10 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
         from kulshan.remediation import enrich_findings
         enrich_findings(all_findings)
         
-        # ── Additive CUR mode: also run CUR investigation ────────────────
+        # ── Additive CUR mode: also run CUR analysis ────────────────
         if use_cur == "additive" and cur_s3_uri:
             try:
-                from kulshan.cur.s3_query import connect_s3_duckdb, investigate_cost_s3
+                from kulshan.cur.s3_query import connect_s3_duckdb, analyze_cost_s3
                 from kulshan.cur.manifest_reader import read_manifest_uri
                 from datetime import date
                 
@@ -901,7 +901,7 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
                 current_month = date.today().strftime("%Y-%m")
                 con = connect_s3_duckdb()
                 manifest = read_manifest_uri(cur_s3_uri, billing_period=current_month)
-                brief = investigate_cost_s3(con, manifest, current_month)
+                brief = analyze_cost_s3(con, manifest, current_month)
                 con.close()
                 
                 # Add CUR data to cost pack metadata
@@ -1278,12 +1278,12 @@ def _object_access_issue_text(probe) -> str:
         f"object ARN={probe.object_arn}; {probe.kms_hint}"
     )
 @main.group()
-def investigate() -> None:
-    """Investigate a specific cloud cost movement from local evidence."""
+def analyze() -> None:
+    """Analyze a specific cloud cost movement from local evidence."""
 
 
 
-@investigate.command("cost")
+@analyze.command("cost")
 @click.option(
     "--s3",
     "s3_uri",
@@ -1300,7 +1300,7 @@ def investigate() -> None:
 @click.option(
     "--month",
     required=True,
-    help="Billing month to investigate in YYYY-MM format.",
+    help="Billing month to analyze in YYYY-MM format.",
 )
 @click.option(
     "--confirm-scan",
@@ -1313,10 +1313,10 @@ def investigate() -> None:
     "-o",
     type=click.Path(),
     default=None,
-    help="Write investigation output to .json or .md.",
+    help="Write analysis output to .json or .md.",
 )
 @click.pass_context
-def investigate_cost(
+def analyze_cost(
     ctx: click.Context,
     s3_uri: str | None,
     cur_path: str | None,
@@ -1324,7 +1324,7 @@ def investigate_cost(
     confirm_scan: bool,
     output: str | None,
 ) -> None:
-    """Investigate generic monthly cost movement from CUR/Data Export evidence."""
+    """Analyze generic monthly cost movement from CUR/Data Export evidence."""
     from rich.console import Console as RichConsole
 
     from kulshan.cur.errors import CurDataError
@@ -1333,10 +1333,10 @@ def investigate_cost(
         connect_s3_duckdb,
         cur_columns,
         estimate_scan_bytes,
-        investigate_cost_s3,
+        analyze_cost_s3,
         select_cost_column,
     )
-    from kulshan.investigate.export import (
+    from kulshan.analyze.export import (
         cost_result_to_json,
         cost_result_to_markdown,
         investigation_format_from_path,
@@ -1355,10 +1355,10 @@ def investigate_cost(
         console.print("[red]Provide exactly one source: --s3 s3://bucket/prefix/ or --path ./cur/.[/red]")
         sys.exit(ExitCode.CONFIG_ERROR)
 
-    # Local CUR investigation
+    # Local CUR analysis
     if cur_path:
-        from kulshan.investigate.cost import investigate_cost_cur
-        from kulshan.investigate.export import (
+        from kulshan.analyze.cost import analyze_cost_cur
+        from kulshan.analyze.export import (
             export_brief,
             investigation_format_from_path,
         )
@@ -1462,9 +1462,9 @@ def investigate_cost(
                 pass  # Non-fatal: validation failure doesn't block investigation
 
         try:
-            brief = investigate_cost_cur(cur_path, month=month)
+            brief = analyze_cost_cur(cur_path, month=month)
         except Exception as exc:
-            console.print(f"[red]Cost investigation failed: {exc}[/red]")
+            console.print(f"[red]Cost analysis failed: {exc}[/red]")
             sys.exit(ExitCode.CONFIG_ERROR)
 
         # Export
@@ -1473,7 +1473,7 @@ def investigate_cost(
             console.print(f"Wrote: {output}")
         else:
             # Terminal output
-            from kulshan.investigate.export import brief_to_terminal
+            from kulshan.analyze.export import brief_to_terminal
             console.print(brief_to_terminal(brief))
         return
 
@@ -1518,7 +1518,7 @@ def investigate_cost(
                     "to continue.[/red]"
                 )
                 sys.exit(ExitCode.CONFIG_ERROR)
-            result = investigate_cost_s3(con, manifest, month)
+            result = analyze_cost_s3(con, manifest, month)
         finally:
             con.close()
     except (CurManifestError, CurDataError) as exc:
@@ -1561,7 +1561,7 @@ def _print_cost_table(console, title: str, rows: tuple[tuple[str, float], ...]) 
     console.print(table)
 
 
-@investigate.command("ec2")
+@analyze.command("ec2")
 @click.option(
     "--cur",
     "cur_path",
@@ -1572,23 +1572,23 @@ def _print_cost_table(console, title: str, rows: tuple[tuple[str, float], ...]) 
 @click.option(
     "--month",
     default=None,
-    help="Current billing month to investigate in YYYY-MM format. Defaults to latest month.",
+    help="Current billing month to analyze in YYYY-MM format. Defaults to latest month.",
 )
 @click.option(
     "--output",
     "-o",
     type=click.Path(),
     default=None,
-    help="Write investigation output to .json or .md.",
+    help="Write analysis output to .json or .md.",
 )
 @click.pass_context
-def investigate_ec2(ctx: click.Context, cur_path: str, month: str | None, output: str | None) -> None:
-    """Produce a local EC2 investigation brief from Parquet CUR data."""
+def analyze_ec2(ctx: click.Context, cur_path: str, month: str | None, output: str | None) -> None:
+    """Produce a local EC2 analysis brief from Parquet CUR data."""
     from rich.console import Console as RichConsole
     from rich.table import Table
 
-    from kulshan.investigate import CurInvestigationError, investigate_ec2_cur
-    from kulshan.investigate.export import (
+    from kulshan.analyze import CurAnalysisError, analyze_ec2_cur
+    from kulshan.analyze.export import (
         ec2_brief_to_json,
         ec2_brief_to_markdown,
         investigation_format_from_path,
@@ -1693,9 +1693,9 @@ def investigate_ec2(ctx: click.Context, cur_path: str, month: str | None, output
             pass  # Non-fatal
 
     try:
-        brief = investigate_ec2_cur(cur_path, month=month)
-    except CurInvestigationError as exc:
-        console.print(f"[red]Cannot investigate EC2 CUR data: {exc}[/red]")
+        brief = analyze_ec2_cur(cur_path, month=month)
+    except CurAnalysisError as exc:
+        console.print(f"[red]Cannot analyze EC2 CUR data: {exc}[/red]")
         sys.exit(ExitCode.CONFIG_ERROR)
 
     if output:
@@ -2136,7 +2136,7 @@ main.add_command(workspace_group)
 
 @main.command()
 @click.pass_context
-def doctor(ctx: click.Context) -> None:
+def preflight(ctx: click.Context) -> None:
     """Check AWS connectivity and readiness without running a scan.
 
     \b
@@ -2157,7 +2157,7 @@ def doctor(ctx: click.Context) -> None:
     role_arn = ctx.obj.get("role_arn")
 
     console.print()
-    console.print("  [bold]Kulshan Doctor[/bold] — checking AWS readiness")
+    console.print("  [bold]Kulshan Preflight[/bold] -- checking AWS readiness")
     console.print()
 
     try:

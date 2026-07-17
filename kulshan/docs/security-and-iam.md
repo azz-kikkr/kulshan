@@ -115,7 +115,7 @@ Deploy via StackSet across member accounts. Use role assumption per account.
 ### Verify permissions
 
 ```bash
-kulshan doctor
+kulshan preflight
 ```
 
 Missing permissions degrade gracefully (partial results, not hard failures).

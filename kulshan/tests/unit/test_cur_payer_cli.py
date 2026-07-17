@@ -1,7 +1,7 @@
 """CLI-level CUR payer validation proof tests.
 
 Uses temporary Parquet fixtures generated via DuckDB.
-Proves payer validation for both investigate cost and investigate ec2.
+Proves payer validation for both analyze cost and analyze ec2.
 No real AWS credentials used.
 """
 from __future__ import annotations
@@ -177,14 +177,14 @@ class TestPayerValidationWithParquet:
 
 
 # ---------------------------------------------------------------------------
-# CLI-level investigate cost payer proof
+# CLI-level analyze cost payer proof
 # ---------------------------------------------------------------------------
 
 
-class TestInvestigateCostPayerCLI:
+class TestAnalyzeCostPayerCLI:
 
-    def test_matching_payer_allows_investigation(self, tmp_path):
-        """investigate cost with matching payer proceeds."""
+    def test_matching_payer_allows_analysis(self, tmp_path):
+        """analyze cost with matching payer proceeds."""
         from kulshan.workspace.resolution import _reset_migration_guard
         _reset_migration_guard()
 
@@ -196,7 +196,7 @@ class TestInvestigateCostPayerCLI:
         with p["ws_root"], p["ws_path"], p["config_file"], p["legacy_main"], p["legacy_sec"]:
             result = runner.invoke(main, [
                 "--workspace", "customer-a",
-                "investigate", "cost",
+                "analyze", "cost",
                 "--path", str(pq.parent),
                 "--month", "2026-06",
             ])
@@ -205,7 +205,7 @@ class TestInvestigateCostPayerCLI:
         assert "payer mismatch" not in result.output.lower()
 
     def test_mismatch_exits_before_output(self, tmp_path):
-        """investigate cost with mismatched payer exits before output."""
+        """analyze cost with mismatched payer exits before output."""
         from kulshan.workspace.resolution import _reset_migration_guard
         _reset_migration_guard()
 
@@ -217,7 +217,7 @@ class TestInvestigateCostPayerCLI:
         with p["ws_root"], p["ws_path"], p["config_file"], p["legacy_main"], p["legacy_sec"]:
             result = runner.invoke(main, [
                 "--workspace", "customer-a",
-                "investigate", "cost",
+                "analyze", "cost",
                 "--path", str(pq.parent),
                 "--month", "2026-06",
             ])
@@ -226,7 +226,7 @@ class TestInvestigateCostPayerCLI:
         assert "payer mismatch" in result.output.lower() or "does not belong" in result.output.lower()
 
     def test_multiple_payers_fails(self, tmp_path):
-        """investigate cost with multiple payer IDs fails."""
+        """analyze cost with multiple payer IDs fails."""
         from kulshan.workspace.resolution import _reset_migration_guard
         _reset_migration_guard()
 
@@ -238,7 +238,7 @@ class TestInvestigateCostPayerCLI:
         with p["ws_root"], p["ws_path"], p["config_file"], p["legacy_main"], p["legacy_sec"]:
             result = runner.invoke(main, [
                 "--workspace", "customer-a",
-                "investigate", "cost",
+                "analyze", "cost",
                 "--path", str(pq.parent),
                 "--month", "2026-06",
             ])
@@ -247,7 +247,7 @@ class TestInvestigateCostPayerCLI:
         assert "multiple payer" in result.output.lower()
 
     def test_missing_payer_warns_and_proceeds(self, tmp_path):
-        """investigate cost with no payer column warns and proceeds."""
+        """analyze cost with no payer column warns and proceeds."""
         from kulshan.workspace.resolution import _reset_migration_guard
         _reset_migration_guard()
 
@@ -259,12 +259,12 @@ class TestInvestigateCostPayerCLI:
         with p["ws_root"], p["ws_path"], p["config_file"], p["legacy_main"], p["legacy_sec"]:
             result = runner.invoke(main, [
                 "--workspace", "customer-a",
-                "investigate", "cost",
+                "analyze", "cost",
                 "--path", str(pq.parent),
                 "--month", "2026-06",
             ])
 
-        # Warning shown but investigation proceeds (may fail for other reasons)
+        # Warning shown but analysis proceeds (may fail for other reasons)
         assert "does not contain payer" in result.output.lower() or "warning" in result.output.lower()
 
     def test_payer_redacted_in_mismatch(self, tmp_path):
@@ -280,7 +280,7 @@ class TestInvestigateCostPayerCLI:
         with p["ws_root"], p["ws_path"], p["config_file"], p["legacy_main"], p["legacy_sec"]:
             result = runner.invoke(main, [
                 "--workspace", "customer-a",
-                "investigate", "cost",
+                "analyze", "cost",
                 "--path", str(pq.parent),
                 "--month", "2026-06",
             ])

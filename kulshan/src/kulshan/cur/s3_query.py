@@ -133,10 +133,10 @@ def estimate_scan_bytes(
     )
 
 
-def investigate_cost_s3(
+def analyze_cost_s3(
     con: Any, manifest: ManifestIndex, month: str
 ) -> CostInvestigationResult:
-    """Run a generic monthly cost investigation over S3 CUR Parquet with DuckDB httpfs."""
+    """Run a generic monthly cost analysis over S3 CUR Parquet with DuckDB httpfs."""
     columns = cur_columns(con, manifest)
     cost_selection = select_cost_column(con, manifest, columns, month)
     service_col = _required_column(columns, "line_item_product_code", "product_servicecode")

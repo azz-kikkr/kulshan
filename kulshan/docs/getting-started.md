@@ -97,10 +97,10 @@ kulshan --role-arn arn:aws:iam::123456789012:role/KulshanAudit report
 ### Verify credentials
 
 ```bash
-kulshan doctor
+kulshan preflight
 ```
 
-Doctor validates:
+Preflight validates:
 - AWS credentials are configured
 - STS caller identity resolves
 - Cost Explorer API is reachable

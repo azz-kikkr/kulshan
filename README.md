@@ -81,7 +81,7 @@ kulshan report --packs all --regions us-east-1    # full diagnostic
 ## Quick Reference
 
 ```bash
-kulshan doctor                          # Check credentials and permissions
+kulshan preflight                       # Check credentials and permissions
 kulshan report                          # Cost baseline (default)
 kulshan report -o report.html           # HTML report
 kulshan report --packs all --regions us-east-1 --deep  # Full deep scan

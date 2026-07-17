@@ -93,12 +93,12 @@ kulshan report --packs security --regions us-east-1 --deep
 
 ---
 
-### `kulshan doctor`
+### `kulshan preflight`
 
 Check AWS connectivity and permissions without running a scan. No cost incurred.
 
 ```bash
-kulshan doctor
+kulshan preflight
 ```
 
 No options. Validates:
@@ -309,9 +309,9 @@ kulshan workspace default-connection WORKSPACE CONNECTION_NAME
 
 ---
 
-### CUR & Investigation Commands
+### CUR & Analysis Commands
 
-Kulshan can investigate cost movements directly from CUR/Data Export Parquet files (local or S3). No Athena, no Glue, no data warehouse. DuckDB queries your data in place.
+Kulshan can analyze cost movements directly from CUR/Data Export Parquet files (local or S3). No Athena, no Glue, no data warehouse. DuckDB queries your data in place.
 
 #### `kulshan cur validate`
 
@@ -344,14 +344,14 @@ Quick S3 connectivity check without downloading data.
 kulshan cur s3-check --s3 s3://bucket/prefix/
 ```
 
-#### `kulshan investigate cost`
+#### `kulshan analyze cost`
 
 Top movers by service, account, region, usage type. Period-over-period delta. Suggested next steps.
 
 ```bash
-kulshan investigate cost --path ./cur/ --month 2024-06
-kulshan investigate cost --s3 s3://bucket/prefix/ --month 2024-06
-kulshan investigate cost --path ./cur/ --month 2024-06 -o report.json
+kulshan analyze cost --path ./cur/ --month 2024-06
+kulshan analyze cost --s3 s3://bucket/prefix/ --month 2024-06
+kulshan analyze cost --path ./cur/ --month 2024-06 -o report.json
 ```
 
 | Option | Type | Description |
@@ -362,13 +362,13 @@ kulshan investigate cost --path ./cur/ --month 2024-06 -o report.json
 | `--confirm-scan` | flag | Confirm large S3 scans |
 | `-o, --output PATH` | path | Export to `.json` or `.md` |
 
-#### `kulshan investigate ec2`
+#### `kulshan analyze ec2`
 
 EC2-specific: instance family, pricing model, region breakdowns. Resource-level contributors. Tag coverage.
 
 ```bash
-kulshan investigate ec2 --cur ./cur/ --month 2024-06
-kulshan investigate ec2 --cur ./cur/ --month 2024-06 -o ec2-brief.json
+kulshan analyze ec2 --cur ./cur/ --month 2024-06
+kulshan analyze ec2 --cur ./cur/ --month 2024-06 -o ec2-brief.json
 ```
 
 | Option | Type | Description |

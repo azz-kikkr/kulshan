@@ -17,7 +17,7 @@ def register_tools(mcp: Any) -> None:
     """Register Kulshan MCP tools on a FastMCP instance."""
 
     @mcp.tool()
-    def kulshan_doctor() -> str:
+    def kulshan_preflight() -> str:
         """Check AWS caller identity using the default credential chain."""
         try:
             identity = boto3.client("sts").get_caller_identity()
@@ -75,28 +75,28 @@ def register_tools(mcp: Any) -> None:
             )
 
     @mcp.tool()
-    def kulshan_investigate_ec2(cur_path: str, month: str | None = None) -> str:
-        """Investigate EC2 cost movement from local CUR/Data Export Parquet."""
+    def kulshan_analyze_ec2(cur_path: str, month: str | None = None) -> str:
+        """Analyze EC2 cost movement from local CUR/Data Export Parquet."""
         try:
-            from kulshan.investigate import investigate_ec2_cur
-            from kulshan.investigate.export import ec2_brief_to_json
+            from kulshan.analyze import analyze_ec2_cur
+            from kulshan.analyze.export import ec2_brief_to_json
 
-            return ec2_brief_to_json(investigate_ec2_cur(cur_path, month=month))
+            return ec2_brief_to_json(analyze_ec2_cur(cur_path, month=month))
         except Exception as exc:
             return _error(exc, "Validate the local export with `kulshan cur validate --path`.")
 
     @mcp.tool()
-    def kulshan_investigate_cost(s3_uri: str, month: str) -> str:
-        """Investigate monthly cost from S3 CUR/Data Export Parquet."""
+    def kulshan_analyze_cost(s3_uri: str, month: str) -> str:
+        """Analyze monthly cost from S3 CUR/Data Export Parquet."""
         try:
             from kulshan.cur.manifest_reader import read_manifest_uri
-            from kulshan.cur.s3_query import connect_s3_duckdb, investigate_cost_s3
-            from kulshan.investigate.export import cost_result_to_json
+            from kulshan.cur.s3_query import connect_s3_duckdb, analyze_cost_s3
+            from kulshan.analyze.export import cost_result_to_json
 
             manifest = read_manifest_uri(s3_uri, billing_period=month)
             con = connect_s3_duckdb()
             try:
-                result = investigate_cost_s3(con, manifest, month)
+                result = analyze_cost_s3(con, manifest, month)
             finally:
                 con.close()
             return cost_result_to_json(result, month)

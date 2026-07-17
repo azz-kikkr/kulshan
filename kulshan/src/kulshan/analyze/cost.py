@@ -1,4 +1,4 @@
-"""Generic cost investigation: top movers across all services from local CUR/Data Exports.
+"""Generic cost analysis: top movers across all services from local CUR/Data Exports.
 
 This module provides period-over-period cost movement analysis at the service,
 account, region, and usage-type level. It returns a CostInvestigationBrief with
@@ -18,8 +18,8 @@ from kulshan.cur.duckdb_engine import connect_memory, register_cur_raw
 from kulshan.cur.errors import CurDataError
 from kulshan.cur.schema import CurColumnMapping
 from kulshan.cur.source import local_parquet_source
-from kulshan.investigate.errors import CurInvestigationError
-from kulshan.investigate.models import (
+from kulshan.analyze.errors import CurAnalysisError
+from kulshan.analyze.models import (
     ConfidenceAssessment,
     CostBasis,
     CostInvestigationBrief,
@@ -33,12 +33,12 @@ from kulshan.investigate.models import (
 _MONTH_PATTERN = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 
 
-def investigate_cost_cur(
+def analyze_cost_cur(
     cur_path: str | Path,
     month: str | None = None,
     top_n: int = 10,
 ) -> CostInvestigationBrief:
-    """Investigate cost movement across all services in a local Parquet CUR export.
+    """Analyze cost movement across all services in a local Parquet CUR export.
 
     Returns a CostInvestigationBrief with full evidence contract including:
     - Provenance (schema version, kulshan version, timestamps)
@@ -56,7 +56,7 @@ def investigate_cost_cur(
         CostInvestigationBrief with full evidence contract.
 
     Raises:
-        CurInvestigationError: If the CUR data cannot be read or queried.
+        CurAnalysisError: If the CUR data cannot be read or queried.
     """
     if month is not None:
         _validate_month(month)
@@ -65,7 +65,7 @@ def investigate_cost_cur(
         source = local_parquet_source(str(cur_path))
         con = connect_memory()
     except CurDataError as exc:
-        raise CurInvestigationError(str(exc)) from exc
+        raise CurAnalysisError(str(exc)) from exc
 
     try:
         mapping = register_cur_raw(con, source)
@@ -165,19 +165,19 @@ def investigate_cost_cur(
             suggested_deep_dives=suggested_deep_dives,
             review_questions=review_questions,
         )
-    except CurInvestigationError:
+    except CurAnalysisError:
         raise
     except CurDataError as exc:
-        raise CurInvestigationError(str(exc)) from exc
+        raise CurAnalysisError(str(exc)) from exc
     except Exception as exc:
-        raise CurInvestigationError(f"Could not query local CUR Parquet data: {exc}") from exc
+        raise CurAnalysisError(f"Could not query local CUR Parquet data: {exc}") from exc
     finally:
         con.close()
 
 
 def _validate_month(month: str) -> None:
     if not _MONTH_PATTERN.match(month):
-        raise CurInvestigationError("Month must use YYYY-MM format, for example 2026-06.")
+        raise CurAnalysisError("Month must use YYYY-MM format, for example 2026-06.")
 
 
 def _previous_month(month: str) -> str:
@@ -214,7 +214,7 @@ def _latest_two_periods(con: Any, mapping: CurColumnMapping) -> tuple[str, str]:
         ).fetchall()
     ]
     if len(periods) < 2:
-        raise CurInvestigationError(
+        raise CurAnalysisError(
             "Need at least two monthly periods with cost data in the local CUR export."
         )
     return periods[0], periods[1]
@@ -235,11 +235,11 @@ def _require_period_data(
     ).fetchall()
     available_periods = {row[0] for row in rows}
     if current_period not in available_periods:
-        raise CurInvestigationError(
+        raise CurAnalysisError(
             f"No cost data found for selected month {current_period} in the local CUR export."
         )
     if previous_period not in available_periods:
-        raise CurInvestigationError(
+        raise CurAnalysisError(
             f"No cost data found for previous month {previous_period} in the local CUR export."
         )
 
@@ -530,10 +530,10 @@ def _suggested_deep_dives(
     if top_services:
         top_service = top_services[0].name
         if top_service.upper() in ("AMAZONEC2", "EC2", "AMAZON ELASTIC COMPUTE CLOUD"):
-            suggestions.append("kulshan investigate ec2 --cur <path> --month <YYYY-MM>")
-        # Future: add other service-specific investigations
+            suggestions.append("kulshan analyze ec2 --cur <path> --month <YYYY-MM>")
+        # Future: add other service-specific analyses
         # elif top_service.upper() in ("AMAZONS3", "S3"):
-        #     suggestions.append("kulshan investigate s3 --cur <path> --month <YYYY-MM>")
+        #     suggestions.append("kulshan analyze s3 --cur <path> --month <YYYY-MM>")
 
     if top_accounts and len(top_accounts) > 1:
         suggestions.append("Review account-level budgets and alerts")

@@ -1171,7 +1171,7 @@ class TestGlobalWorkspaceReachesSubcommands:
         assert result.exit_code == 0
         assert "not found" not in result.output.lower()
 
-    def test_investigate_cost_receives_workspace(self, tmp_path):
+    def test_analyze_cost_receives_workspace(self, tmp_path):
         from kulshan.workspace.resolution import _reset_migration_guard
         _reset_migration_guard()
         ws_root = self._setup(tmp_path)
@@ -1180,14 +1180,14 @@ class TestGlobalWorkspaceReachesSubcommands:
         with patches[0], patches[1], patches[2], patches[3], patches[4]:
             result = runner.invoke(main, [
                 "--workspace", "cust-ctx",
-                "investigate", "cost",
+                "analyze", "cost",
                 "--path", str(tmp_path / "no-cur"),
                 "--month", "2026-06",
             ])
         assert result.exit_code != 0
         assert "workspace" not in result.output.lower() or "not found" not in result.output.lower()
 
-    def test_investigate_ec2_receives_workspace(self, tmp_path):
+    def test_analyze_ec2_receives_workspace(self, tmp_path):
         from kulshan.workspace.resolution import _reset_migration_guard
         _reset_migration_guard()
         ws_root = self._setup(tmp_path)
@@ -1196,7 +1196,7 @@ class TestGlobalWorkspaceReachesSubcommands:
         with patches[0], patches[1], patches[2], patches[3], patches[4]:
             result = runner.invoke(main, [
                 "--workspace", "cust-ctx",
-                "investigate", "ec2",
+                "analyze", "ec2",
                 "--cur", str(tmp_path / "no-ec2"),
                 "--month", "2026-06",
             ])

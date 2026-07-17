@@ -49,23 +49,23 @@ Any MCP 1.0+ compatible client can connect by spawning `kulshan mcp-serve` as a 
 
 | Tool | Parameters | Description |
 |------|------------|-------------|
-| `kulshan_doctor` | (none) | Check AWS caller identity using the default credential chain |
+| `kulshan_preflight` | (none) | Check AWS caller identity using the default credential chain |
 | `kulshan_report` | `packs`, `days`, `regions` | Run selected audit packs and return compact findings |
 | `kulshan_quick_security` | `region` | Fast security scan of a single region (critical/high only) |
 | `kulshan_list_packs` | (none) | List all available audit packs with descriptions |
 | `kulshan_cur_validate` | `cur_path` | Validate local CUR/Data Export Parquet readability |
-| `kulshan_investigate_ec2` | `cur_path`, `month` | Investigate EC2 cost movement from local CUR |
-| `kulshan_investigate_cost` | `s3_uri`, `month` | Investigate monthly cost movement from S3 CUR |
+| `kulshan_analyze_ec2` | `cur_path`, `month` | Analyze EC2 cost movement from local CUR |
+| `kulshan_analyze_cost` | `s3_uri`, `month` | Analyze monthly cost movement from S3 CUR |
 
 ---
 
 ## Tool Schemas
 
-### kulshan_doctor
+### kulshan_preflight
 
 ```json
 {
-  "name": "kulshan_doctor",
+  "name": "kulshan_preflight",
   "description": "Check AWS caller identity using the default credential chain",
   "inputSchema": {
     "type": "object",
@@ -206,7 +206,7 @@ Any MCP 1.0+ compatible client can connect by spawning `kulshan mcp-serve` as a 
 ```json
 {
   "name": "kulshan_investigate_ec2",
-  "description": "Investigate EC2 cost movement from local CUR Parquet",
+  "description": "Analyze EC2 cost movement from local CUR Parquet",
   "inputSchema": {
     "type": "object",
     "properties": {
@@ -229,7 +229,7 @@ Any MCP 1.0+ compatible client can connect by spawning `kulshan mcp-serve` as a 
 ```json
 {
   "name": "kulshan_investigate_cost",
-  "description": "Investigate monthly cost movement from S3 CUR",
+  "description": "Analyze monthly cost movement from S3 CUR",
   "inputSchema": {
     "type": "object",
     "properties": {

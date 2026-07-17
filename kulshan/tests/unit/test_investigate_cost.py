@@ -36,7 +36,7 @@ def _patch_success(monkeypatch, estimate_bytes: int = 70_000) -> None:
     )
 
 
-def test_investigate_cost_s3_reads_manifest(monkeypatch) -> None:
+def test_analyze_cost_s3_reads_manifest(monkeypatch) -> None:
     calls = []
     monkeypatch.setattr(
         "kulshan.cur.manifest_reader.read_manifest_uri",
@@ -47,7 +47,7 @@ def test_investigate_cost_s3_reads_manifest(monkeypatch) -> None:
 
     result = CliRunner().invoke(
         main,
-        ["investigate", "cost", "--s3", "s3://bucket/export/", "--month", "2026-06"],
+        ["analyze", "cost", "--s3", "s3://bucket/export/", "--month", "2026-06"],
     )
 
     assert result.exit_code == 0
@@ -55,7 +55,7 @@ def test_investigate_cost_s3_reads_manifest(monkeypatch) -> None:
     assert "manifest read: yes" in result.output
 
 
-def test_investigate_cost_scan_over_threshold_requires_confirm(monkeypatch) -> None:
+def test_analyze_cost_scan_over_threshold_requires_confirm(monkeypatch) -> None:
     monkeypatch.setattr(
         "kulshan.cur.manifest_reader.read_manifest_uri",
         lambda s3_uri, billing_period: _manifest(200),
@@ -66,14 +66,14 @@ def test_investigate_cost_scan_over_threshold_requires_confirm(monkeypatch) -> N
 
     result = CliRunner().invoke(
         main,
-        ["investigate", "cost", "--s3", "s3://bucket/export/", "--month", "2026-06"],
+        ["analyze", "cost", "--s3", "s3://bucket/export/", "--month", "2026-06"],
     )
 
     assert result.exit_code != 0
     assert "--confirm-scan" in result.output
 
 
-def test_investigate_cost_scan_under_threshold_runs(monkeypatch) -> None:
+def test_analyze_cost_scan_under_threshold_runs(monkeypatch) -> None:
     monkeypatch.setattr(
         "kulshan.cur.manifest_reader.read_manifest_uri",
         lambda s3_uri, billing_period: _manifest(),
@@ -83,14 +83,14 @@ def test_investigate_cost_scan_under_threshold_runs(monkeypatch) -> None:
 
     result = CliRunner().invoke(
         main,
-        ["investigate", "cost", "--s3", "s3://bucket/export/", "--month", "2026-06"],
+        ["analyze", "cost", "--s3", "s3://bucket/export/", "--month", "2026-06"],
     )
 
     assert result.exit_code == 0
     assert "Total spend: $42.00" in result.output
 
 
-def test_investigate_cost_output_includes_dimensions_and_note(monkeypatch) -> None:
+def test_analyze_cost_output_includes_dimensions_and_note(monkeypatch) -> None:
     monkeypatch.setattr(
         "kulshan.cur.manifest_reader.read_manifest_uri",
         lambda s3_uri, billing_period: _manifest(),
@@ -100,7 +100,7 @@ def test_investigate_cost_output_includes_dimensions_and_note(monkeypatch) -> No
 
     result = CliRunner().invoke(
         main,
-        ["investigate", "cost", "--s3", "s3://bucket/export/", "--month", "2026-06"],
+        ["analyze", "cost", "--s3", "s3://bucket/export/", "--month", "2026-06"],
     )
 
     assert result.exit_code == 0
@@ -112,8 +112,8 @@ def test_investigate_cost_output_includes_dimensions_and_note(monkeypatch) -> No
     assert "Glue" not in result.output
 
 
-def test_investigate_cost_usage_requires_source() -> None:
-    result = CliRunner().invoke(main, ["investigate", "cost", "--month", "2026-06"])
+def test_analyze_cost_usage_requires_source() -> None:
+    result = CliRunner().invoke(main, ["analyze", "cost", "--month", "2026-06"])
 
     assert result.exit_code != 0
     assert "--s3 s3://bucket/prefix/ or --path ./cur/" in result.output
@@ -144,7 +144,7 @@ def _patch_query(monkeypatch, estimate: ScanEstimate | None = None) -> None:
         raising=False,
     )
     monkeypatch.setattr(
-        "kulshan.cur.s3_query.investigate_cost_s3",
+        "kulshan.cur.s3_query.analyze_cost_s3",
         lambda con, manifest, month: CostInvestigationResult(
             total_spend=42.0,
             cost_column="line_item_unblended_cost",

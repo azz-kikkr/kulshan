@@ -90,7 +90,7 @@ Maintainer-managed: update `__version__.py` → CHANGELOG → tag → push tag �
 | Error | Fix |
 |-------|-----|
 | "Access Denied" on Cost Explorer | Activate CE in AWS Console (Billing section). Attach Kulshan policy. |
-| "Access Denied" on other services | Run `kulshan doctor` to identify missing permissions. |
+| "Access Denied" on other services | Run `kulshan preflight` to identify missing permissions. |
 | "Organizations not available" | Normal for single-account mode. Kulshan works fine without it. |
 
 ### Performance

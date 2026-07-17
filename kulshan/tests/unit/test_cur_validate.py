@@ -78,11 +78,11 @@ def test_validate_reports_top_product_codes_and_usage_types() -> None:
     assert "TimedStorage-ByteHrs" in result.output
 
 
-def test_investigate_ec2_still_exits_nonzero_with_no_ec2_rows() -> None:
+def test_analyze_ec2_still_exits_nonzero_with_no_ec2_rows() -> None:
     cur = _write_non_ec2_cur(_workspace_tmp("ec2"))
 
     result = CliRunner().invoke(
-        main, ["investigate", "ec2", "--cur", str(cur), "--month", "2026-06"]
+        main, ["analyze", "ec2", "--cur", str(cur), "--month", "2026-06"]
     )
 
     assert result.exit_code != 0
@@ -121,17 +121,17 @@ def _write_null_net_cost_cur_two_months(path: Path) -> Path:
     return cur
 
 
-def test_investigate_cost_uses_fallback_column_when_net_unblended_is_null() -> None:
-    """Regression test: investigate cost should use unblended_cost when net_unblended is all NULL.
+def test_analyze_cost_uses_fallback_column_when_net_unblended_is_null() -> None:
+    """Regression test: analyze cost should use unblended_cost when net_unblended is all NULL.
 
     This tests the bug where cur validate correctly fell back to line_item_unblended_cost
-    when line_item_net_unblended_cost was all NULL, but investigate cost did not,
+    when line_item_net_unblended_cost was all NULL, but analyze cost did not,
     causing "No cost data found" errors on valid CUR exports.
     """
     cur = _write_null_net_cost_cur_two_months(_workspace_tmp("cost-fallback"))
 
     result = CliRunner().invoke(
-        main, ["investigate", "cost", "--path", str(cur), "--month", "2026-07"]
+        main, ["analyze", "cost", "--path", str(cur), "--month", "2026-07"]
     )
 
     # Should succeed, not fail with "No cost data found"
@@ -140,7 +140,7 @@ def test_investigate_cost_uses_fallback_column_when_net_unblended_is_null() -> N
     assert "AmazonS3" in result.output or "Total" in result.output
 
 
-def test_investigate_cost_fallback_note_propagates_to_json_output() -> None:
+def test_analyze_cost_fallback_note_propagates_to_json_output() -> None:
     """The cost basis should include fallback note when a non-preferred cost column is used."""
     import json
     import tempfile
@@ -152,7 +152,7 @@ def test_investigate_cost_fallback_note_propagates_to_json_output() -> None:
         out_file = P(tmpdir) / "brief.json"
         result = CliRunner().invoke(
             main,
-            ["investigate", "cost", "--path", str(cur), "--month", "2026-07", "-o", str(out_file)],
+            ["analyze", "cost", "--path", str(cur), "--month", "2026-07", "-o", str(out_file)],
         )
 
         assert result.exit_code == 0, f"Expected success but got: {result.output}"
@@ -164,13 +164,13 @@ def test_investigate_cost_fallback_note_propagates_to_json_output() -> None:
         assert "was null" in data["cost_basis"]["fallback_note"]
 
 
-def test_validate_and_investigate_cost_select_same_column() -> None:
-    """Both cur validate and investigate cost should select the same cost column."""
+def test_validate_and_analyze_cost_select_same_column() -> None:
+    """Both cur validate and analyze cost should select the same cost column."""
     cur = _write_null_net_cost_cur_two_months(_workspace_tmp("column-agreement"))
 
     validate_result = CliRunner().invoke(main, ["cur", "validate", "--path", str(cur)])
     cost_result = CliRunner().invoke(
-        main, ["investigate", "cost", "--path", str(cur), "--month", "2026-07"]
+        main, ["analyze", "cost", "--path", str(cur), "--month", "2026-07"]
     )
 
     assert validate_result.exit_code == 0

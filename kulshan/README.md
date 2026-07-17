@@ -60,7 +60,7 @@ kulshan --profile production report
 kulshan --role-arn arn:aws:iam::123456789012:role/KulshanAudit report
 ```
 
-Run `kulshan doctor` to verify connectivity and permissions without incurring any cost.
+Run `kulshan preflight` to check connectivity and permissions without incurring any cost.
 
 ---
 
@@ -112,9 +112,9 @@ Query your CUR Parquet files locally or from S3. No Athena, no Glue, no data war
 
 ```bash
 kulshan cur validate --path ./cur/
-kulshan investigate cost --path ./cur/ --month 2024-06
-kulshan investigate ec2 --cur ./cur/ --month 2024-06
-kulshan investigate cost --s3 s3://bucket/prefix/ --month 2024-06
+kulshan analyze cost --path ./cur/ --month 2024-06
+kulshan analyze ec2 --cur ./cur/ --month 2024-06
+kulshan analyze cost --s3 s3://bucket/prefix/ --month 2024-06
 ```
 
 Top movers by service, account, region, usage type. Period-over-period deltas. Resource-level contributors. Tag coverage. All outputs include provenance, evidence IDs, and `human_review_required: true`.
@@ -137,7 +137,7 @@ kulshan mcp-serve
 }
 ```
 
-Seven tools: `kulshan_doctor`, `kulshan_report`, `kulshan_quick_security`, `kulshan_list_packs`, `kulshan_cur_validate`, `kulshan_investigate_ec2`, `kulshan_investigate_cost`.
+Seven tools: `kulshan_preflight`, `kulshan_report`, `kulshan_quick_security`, `kulshan_list_packs`, `kulshan_cur_validate`, `kulshan_analyze_ec2`, `kulshan_analyze_cost`.
 
 ---
 
@@ -182,7 +182,7 @@ Exit code 1 when critical findings are present - use as a quality gate. SARIF up
 
 ```bash
 kulshan --version                       # Version
-kulshan doctor                          # Check credentials and permissions
+kulshan preflight                          # Check credentials and permissions
 kulshan report                          # Cost baseline (default)
 kulshan report --quick                  # Skip confirmation
 kulshan report -o report.html           # HTML report

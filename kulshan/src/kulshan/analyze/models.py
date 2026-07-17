@@ -245,7 +245,7 @@ class InvestigationProvenance:
 class CostInvestigationBrief:
     """Generic top-mover investigation brief.
 
-    This is the output of `kulshan investigate cost` — it identifies where
+    This is the output of `kulshan analyze cost` -- it identifies where
     cost moved without making service-specific explanations. It's the
     "where to look" answer, not the "why it happened" answer.
     """
@@ -326,7 +326,7 @@ class CostInvestigationBrief:
 class Ec2InvestigationBrief:
     """EC2-specific investigation brief with enhanced evidence contract.
 
-    This is the output of `kulshan investigate ec2` — it provides EC2-specific
+    This is the output of `kulshan analyze ec2` -- it provides EC2-specific
     analysis including resource-level breakdown and tag coverage.
     """
 

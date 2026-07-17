@@ -1,4 +1,4 @@
-"""EC2 investigation brief generation from local CUR/Data Exports evidence."""
+"""EC2 analysis brief generation from local CUR/Data Exports evidence."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ from kulshan.cur.duckdb_engine import connect_memory, create_ec2_view, register_
 from kulshan.cur.errors import CurDataError
 from kulshan.cur.schema import CurColumnMapping
 from kulshan.cur.source import local_parquet_source
-from kulshan.investigate.errors import CurInvestigationError
-from kulshan.investigate.models import (
+from kulshan.analyze.errors import CurAnalysisError
+from kulshan.analyze.models import (
     ConfidenceAssessment,
     CostBasis,
     DeltaRow,
@@ -25,8 +25,8 @@ from kulshan.investigate.models import (
 _MONTH_PATTERN = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 
 
-def investigate_ec2_cur(cur_path: str, month: str | None = None) -> Ec2InvestigationBrief:
-    """Investigate EC2 movement in a local Parquet CUR export.
+def analyze_ec2_cur(cur_path: str, month: str | None = None) -> Ec2InvestigationBrief:
+    """Analyze EC2 movement in a local Parquet CUR export.
     
     Returns an Ec2InvestigationBrief with full evidence contract including:
     - Provenance (schema version, kulshan version, timestamps)
@@ -43,7 +43,7 @@ def investigate_ec2_cur(cur_path: str, month: str | None = None) -> Ec2Investiga
         source = local_parquet_source(cur_path)
         con = connect_memory()
     except CurDataError as exc:
-        raise CurInvestigationError(str(exc)) from exc
+        raise CurAnalysisError(str(exc)) from exc
 
     try:
         mapping = register_cur_raw(con, source)
@@ -137,12 +137,12 @@ def investigate_ec2_cur(cur_path: str, month: str | None = None) -> Ec2Investiga
             owner_candidate=owner_candidate,
             review_questions=_review_questions(top_resources, top_usage_types, delta),
         )
-    except CurInvestigationError:
+    except CurAnalysisError:
         raise
     except CurDataError as exc:
-        raise CurInvestigationError(str(exc)) from exc
+        raise CurAnalysisError(str(exc)) from exc
     except Exception as exc:
-        raise CurInvestigationError(f"Could not query local CUR Parquet data: {exc}") from exc
+        raise CurAnalysisError(f"Could not query local CUR Parquet data: {exc}") from exc
     finally:
         con.close()
 
@@ -170,7 +170,7 @@ def _latest_two_periods(con: Any) -> tuple[str, str]:
         ).fetchall()
     ]
     if len(periods) < 2:
-        raise CurInvestigationError(
+        raise CurAnalysisError(
             "Need at least two monthly periods with EC2 cost in the local CUR export."
         )
     return periods[0], periods[1]
@@ -178,7 +178,7 @@ def _latest_two_periods(con: Any) -> tuple[str, str]:
 
 def _validate_month(month: str) -> None:
     if not _MONTH_PATTERN.match(month):
-        raise CurInvestigationError("Month must use YYYY-MM format, for example 2026-06.")
+        raise CurAnalysisError("Month must use YYYY-MM format, for example 2026-06.")
 
 
 def _previous_month(month: str) -> str:
@@ -201,11 +201,11 @@ def _require_period_data(con: Any, previous_period: str, current_period: str) ->
     ).fetchall()
     available_periods = {row[0] for row in rows}
     if current_period not in available_periods:
-        raise CurInvestigationError(
+        raise CurAnalysisError(
             f"No EC2 cost data found for selected month {current_period} in the local CUR export."
         )
     if previous_period not in available_periods:
-        raise CurInvestigationError(
+        raise CurAnalysisError(
             f"No EC2 cost data found for previous month {previous_period} in the local CUR export."
         )
 
