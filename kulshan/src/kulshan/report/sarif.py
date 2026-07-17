@@ -43,6 +43,7 @@ def findings_to_sarif(
     account_id: str = "unknown",
     regions: List[str] | None = None,
     version: str | None = None,
+    coverage: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     """Convert a list of canonical Kulshan findings to a SARIF 2.1.0 document.
 
@@ -150,6 +151,7 @@ def findings_to_sarif(
                     "properties": {
                         "account_id": account_id,
                         "regions": regions,
+                        "coverage": coverage or {},
                     },
                 },
             },
@@ -159,6 +161,7 @@ def findings_to_sarif(
                 "properties": {
                     "account_id": account_id,
                     "regions": regions,
+                        "coverage": coverage or {},
                 },
             }],
         }],

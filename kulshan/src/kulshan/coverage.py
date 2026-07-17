@@ -99,9 +99,13 @@ class CoverageReport:
 
     # Denied permissions discovered during scan
     denied_actions: List[str] = field(default_factory=list)
+    context: Dict[str, Any] = field(default_factory=dict)
+    warnings: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
+            "schema_version": 1,
+            "context": dict(self.context),
             "summary": {
                 "packs_attempted": self.packs_attempted,
                 "packs_completed": self.packs_completed,
@@ -117,6 +121,7 @@ class CoverageReport:
             "data_sources": dict(self.data_sources),
             "denied_actions": list(self.denied_actions),
             "executions": [e.to_dict() for e in self.executions],
+            "warnings": list(self.warnings),
         }
 
     def to_summary_dict(self) -> Dict[str, Any]:
@@ -152,6 +157,7 @@ def build_coverage_from_results(
     duration_seconds: float,
     account_id: str = "",
     payer_account_id: Optional[str] = None,
+    context: Optional[Dict[str, Any]] = None,
 ) -> CoverageReport:
     """Build a CoverageReport from orchestrator results.
 
@@ -234,6 +240,17 @@ def build_coverage_from_results(
     else:
         data_sources["cur_parquet"] = "not_used"
 
+    warnings: List[str] = []
+    if not results:
+        warnings.append("No pack results were recorded")
+    if any(not result.get("coverage") for result in results.values() if not result.get("skipped")):
+        warnings.append("Some packs did not provide region-level execution detail")
+    report_context = dict(context or {})
+    if account_id and "account_id" not in report_context:
+        report_context["account_id"] = account_id
+    if payer_account_id:
+        report_context.setdefault("payer_account_id", payer_account_id)
+
     return CoverageReport(
         packs_attempted=packs_attempted,
         packs_completed=packs_completed,
@@ -246,4 +263,6 @@ def build_coverage_from_results(
         data_sources=data_sources,
         executions=executions,
         denied_actions=denied_actions,
+        context=report_context,
+        warnings=warnings,
     )

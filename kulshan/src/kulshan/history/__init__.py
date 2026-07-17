@@ -48,7 +48,8 @@ CREATE TABLE IF NOT EXISTS scans (
     kulshan_version TEXT,
     full_result_json TEXT,
     report_status TEXT DEFAULT 'complete',
-    payer_account_id TEXT
+    payer_account_id TEXT,
+    coverage_json TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_scans_timestamp ON scans(timestamp);
@@ -141,6 +142,15 @@ class HistoryStore:
                 conn.commit()
             except sqlite3.OperationalError:
                 pass
+        # Add coverage_json column
+        try:
+            conn.execute("SELECT coverage_json FROM scans LIMIT 0")
+        except sqlite3.OperationalError:
+            try:
+                conn.execute("ALTER TABLE scans ADD COLUMN coverage_json TEXT")
+                conn.commit()
+            except sqlite3.OperationalError:
+                pass
         # Create scan_connections table
         conn.executescript(_MIGRATION_TABLE_SQL)
 
@@ -162,6 +172,7 @@ class HistoryStore:
         store_full_result: bool = False,
         report_status: str = "complete",
         payer_account_id: str | None = None,
+        coverage: dict[str, Any] | None = None,
     ) -> str:
         """Save a scan result to history. Returns the scan ID."""
         conn = self._connect()
@@ -198,15 +209,15 @@ class HistoryStore:
             """INSERT INTO scans (id, timestamp, account_id, regions, duration_seconds,
                overall_score, overall_grade, total_findings, critical_findings,
                high_findings, medium_findings, low_findings, pack_scores,
-               kulshan_version, full_result_json, report_status, payer_account_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               kulshan_version, full_result_json, report_status, payer_account_id, coverage_json)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 scan_id, now, account_id, json.dumps(regions), duration_seconds,
                 overall_score, overall_grade, len(findings),
                 severity_counts["critical"], severity_counts["high"],
                 severity_counts["medium"], severity_counts["low"],
                 json.dumps(pack_scores), version, full_json, report_status,
-                payer_account_id,
+                payer_account_id, json.dumps(coverage, default=str) if coverage else None,
             ),
         )
         conn.commit()
@@ -258,6 +269,7 @@ class HistoryStore:
         payer_account_id: str | None,
         connections: list[dict],
         version: str = "",
+        coverage: dict[str, Any] | None = None,
     ) -> str:
         """Save a consolidated scan and its connection metadata atomically.
 
@@ -302,20 +314,20 @@ class HistoryStore:
             }
 
         try:
-            # Parent scan — account_id is NULL for consolidated scans
+            # Parent scan â€” account_id is NULL for consolidated scans
             conn.execute(
                 """INSERT INTO scans (id, timestamp, account_id, regions, duration_seconds,
                    overall_score, overall_grade, total_findings, critical_findings,
                    high_findings, medium_findings, low_findings, pack_scores,
-                   kulshan_version, full_result_json, report_status, payer_account_id)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   kulshan_version, full_result_json, report_status, payer_account_id, coverage_json)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     scan_id, now, None, json.dumps(regions), duration_seconds,
                     overall_score, overall_grade, len(findings),
                     severity_counts["critical"], severity_counts["high"],
                     severity_counts["medium"], severity_counts["low"],
                     json.dumps(pack_scores), version, None, report_status,
-                    payer_account_id,
+                payer_account_id, json.dumps(coverage, default=str) if coverage else None,
                 ),
             )
 

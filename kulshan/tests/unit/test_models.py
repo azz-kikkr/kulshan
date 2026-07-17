@@ -23,7 +23,6 @@ from kulshan.models import (
     ScanResult,
     Severity,
     SuiteConfig,
-    TelemetryEvent,
     Tier,
 )
 
@@ -315,77 +314,17 @@ class TestLicenseInfo:
 
 
 # ---------------------------------------------------------------------------
-# TelemetryEvent tests
-# ---------------------------------------------------------------------------
-
-class TestTelemetryEvent:
-    def test_frozen(self):
-        te = TelemetryEvent(
-            event_type="scan",
-            command="report",
-            suite_version="0.1.0",
-            python_version="3.12.0",
-            os_family="Linux",
-            os_release="6.1",
-            success=True,
-        )
-        with pytest.raises(AttributeError):
-            te.command = "other"  # type: ignore[misc]
-
-    def test_to_json_body(self):
-        te = TelemetryEvent(
-            event_type="scan",
-            command="report",
-            suite_version="0.1.0",
-            python_version="3.12.0",
-            os_family="Linux",
-            os_release="6.1",
-            success=True,
-            timestamp=datetime(2025, 7, 1, tzinfo=timezone.utc),
-        )
-        body = te.to_json_body()
-        parsed = json.loads(body)
-        assert parsed["event_type"] == "scan"
-        assert parsed["success"] is True
-
-
-# ---------------------------------------------------------------------------
-# CIThresholds tests
-# ---------------------------------------------------------------------------
-
-class TestCIThresholds:
-    def test_defaults(self):
-        ct = CIThresholds()
-        assert ct.fail_on_security_severity is None
-        assert ct.fail_on_critical_findings_count is None
-
-    def test_to_dict_from_dict(self):
-        ct = CIThresholds(
-            fail_on_security_severity=Severity.HIGH,
-            fail_on_monthly_waste_usd=Decimal("500"),
-            fail_on_overall_score_below=70,
-        )
-        d = ct.to_dict()
-        restored = CIThresholds.from_dict(d)
-        assert restored.fail_on_security_severity == Severity.HIGH
-        assert restored.fail_on_monthly_waste_usd == Decimal("500")
-        assert restored.fail_on_overall_score_below == 70
-
-
-# ---------------------------------------------------------------------------
-# SuiteConfig tests
+ # SuiteConfig tests
 # ---------------------------------------------------------------------------
 
 class TestSuiteConfig:
     def test_defaults(self):
         cfg = SuiteConfig()
-        assert cfg.telemetry_enabled is False
         assert cfg.aws_regions == ["us-east-1"]
 
     def test_to_dict_sections(self):
         cfg = SuiteConfig()
         d = cfg.to_dict()
         assert "aws" in d
-        assert "telemetry" in d
         assert "ci" in d
         assert "ui" in d

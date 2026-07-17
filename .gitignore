@@ -117,7 +117,7 @@ pytest_*.txt
 real-cur/
 test-cost-brief.json
 
-# --- Local scripts (deploy helpers, CUR populators — not for distribution) ---
+# --- Local scripts (deploy helpers, CUR populators â€” not for distribution) ---
 kulshan/scripts/cur-populator*
 kulshan/scripts/deploy-*
 kulshan/scripts/teardown-*
@@ -125,3 +125,18 @@ kulshan/scripts/setup-*
 
 # --- Sync / backup scratch (local tool artifacts) ---
 .sync-*/
+.kiro/
+docs/
+kulshan/PLAN-0.4.0.md
+kulshan/test_*.txt
+results.txt
+pytest.ini
+kulshan/build/
+kulshan/dist/
+**/__pycache__/
+.coverage
+**/.coverage
+kulshan/kulshan-full-test.json
+kulshan/kulshan-test-report.json
+kulshan-full-report.json
+kulshan-report-*.html

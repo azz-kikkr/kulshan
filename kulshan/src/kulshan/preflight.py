@@ -60,28 +60,28 @@ def run_preflight(
     # 1. Python version
     py_version = sys.version_info
     if py_version >= (3, 9):
-        console.print(f"  [green]✓[/green] Python {py_version.major}.{py_version.minor}")
+        console.print(f"  [green]Ã¢Å“â€œ[/green] Python {py_version.major}.{py_version.minor}")
     else:
-        console.print(f"  [red]✗[/red] Python {py_version.major}.{py_version.minor} (need 3.9+)")
+        console.print(f"  [red]Ã¢Å“â€”[/red] Python {py_version.major}.{py_version.minor} (need 3.9+)")
         all_passed = False
 
     # 2. AWS credentials exist
     try:
         credentials = session.get_credentials()
         if credentials is None:
-            console.print("  [red]✗[/red] No AWS credentials found")
+            console.print("  [red]Ã¢Å“â€”[/red] No AWS credentials found")
             console.print("    [dim]Run 'aws configure' or set AWS_ACCESS_KEY_ID[/dim]")
             all_passed = False
         else:
-            console.print("  [green]✓[/green] AWS credentials found")
+            console.print("  [green]Ã¢Å“â€œ[/green] AWS credentials found")
     except Exception as e:
         error_msg = str(e)
         if "Missing Dependency" in error_msg or "awscrt" in error_msg.lower():
-            console.print("  [red]✗[/red] Missing AWS CRT dependency for login provider")
+            console.print("  [red]Ã¢Å“â€”[/red] Missing AWS CRT dependency for login provider")
             console.print("    [dim]Fix: pip install awscrt[/dim]")
             console.print("    [dim]This is needed for 'aws login' browser-based credentials.[/dim]")
         else:
-            console.print(f"  [red]✗[/red] Credential error: {error_msg[:80]}")
+            console.print(f"  [red]Ã¢Å“â€”[/red] Credential error: {error_msg[:80]}")
         all_passed = False
 
     # 3. STS identity (credentials not expired)
@@ -90,17 +90,17 @@ def run_preflight(
         sts = session.client("sts")
         identity = sts.get_caller_identity()
         account = identity.get("Account", "unknown")
-        console.print(f"  [green]✓[/green] Authenticated (account {account})")
+        console.print(f"  [green]Ã¢Å“â€œ[/green] Authenticated (account {account})")
     except Exception as e:
         error_msg = str(e)
         if "ExpiredToken" in error_msg:
-            console.print("  [red]✗[/red] Credentials expired")
+            console.print("  [red]Ã¢Å“â€”[/red] Credentials expired")
             console.print("    [dim]Run 'aws sso login' or refresh your credentials[/dim]")
         elif "InvalidClientTokenId" in error_msg:
-            console.print("  [red]✗[/red] Invalid credentials")
+            console.print("  [red]Ã¢Å“â€”[/red] Invalid credentials")
             console.print("    [dim]Check your AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY[/dim]")
         else:
-            console.print(f"  [red]✗[/red] Auth failed: {error_msg[:80]}")
+            console.print(f"  [red]Ã¢Å“â€”[/red] Auth failed: {error_msg[:80]}")
         all_passed = False
 
     # If auth failed, skip API probes
@@ -120,20 +120,20 @@ def run_preflight(
             Granularity="DAILY",
             Metrics=["BlendedCost"],
         )
-        console.print("  [green]✓[/green] Cost Explorer API accessible")
+        console.print("  [green]Ã¢Å“â€œ[/green] Cost Explorer API accessible")
         ce_ok = True
     except Exception as e:
         error_msg = str(e)
         if "not enabled" in error_msg.lower() or "OptIn" in error_msg:
-            console.print("  [yellow]⚠[/yellow] Cost Explorer not enabled")
-            console.print("    [dim]Enable in AWS Console → Billing → Cost Explorer. Cost pack will skip.[/dim]")
+            console.print("  [yellow]Ã¢Å¡Â [/yellow] Cost Explorer not enabled")
+            console.print("    [dim]Enable in AWS Console Ã¢â€ â€™ Billing Ã¢â€ â€™ Cost Explorer. Cost pack will skip.[/dim]")
             warnings.append("Cost Explorer not enabled")
         elif "AccessDenied" in error_msg:
-            console.print("  [yellow]⚠[/yellow] No Cost Explorer permission")
+            console.print("  [yellow]Ã¢Å¡Â [/yellow] No Cost Explorer permission")
             console.print("    [dim]Need ce:GetCostAndUsage. Cost pack will be limited.[/dim]")
             warnings.append("No ce:GetCostAndUsage permission")
         else:
-            console.print("  [yellow]⚠[/yellow] Cost Explorer check inconclusive")
+            console.print("  [yellow]Ã¢Å¡Â [/yellow] Cost Explorer check inconclusive")
             warnings.append(f"CE check: {error_msg[:60]}")
 
     # 5. EC2 describe (tests basic resource-level read access)
@@ -141,24 +141,24 @@ def run_preflight(
     try:
         ec2 = session.client("ec2", region_name="us-east-1")
         ec2.describe_instances(MaxResults=5)
-        console.print("  [green]✓[/green] EC2 read access (security, sweep, dr packs)")
+        console.print("  [green]Ã¢Å“â€œ[/green] EC2 read access (security, sweep, dr packs)")
         ec2_ok = True
     except Exception as e:
         error_msg = str(e)
         if "UnauthorizedOperation" in error_msg or "AccessDenied" in error_msg:
-            console.print("  [yellow]⚠[/yellow] No EC2 read permission (some packs limited)")
+            console.print("  [yellow]Ã¢Å¡Â [/yellow] No EC2 read permission (some packs limited)")
             warnings.append("No ec2:DescribeInstances")
         else:
-            console.print("  [yellow]⚠[/yellow] EC2 probe inconclusive")
+            console.print("  [yellow]Ã¢Å¡Â [/yellow] EC2 probe inconclusive")
             warnings.append(f"EC2 check: {error_msg[:60]}")
 
     # 6. Organizations access (for multi-account context)
     try:
         org = session.client("organizations", region_name="us-east-1")
         org.describe_organization()
-        console.print("  [green]✓[/green] Organizations API (multi-account context)")
+        console.print("  [green]Ã¢Å“â€œ[/green] Organizations API (multi-account context)")
     except Exception:
-        console.print("  [dim]  ─[/dim] [dim]Organizations not available (single-account mode)[/dim]")
+        console.print("  [dim]  Ã¢â€â‚¬[/dim] [dim]Organizations not available (single-account mode)[/dim]")
 
     # Summary guidance
     console.print()
@@ -217,16 +217,25 @@ def run_preflight_with_cur(
             result.cur_accessible = accessible
             
             if accessible:
-                console.print(f"  [cyan]⬢[/cyan] CUR/Data Export found: [bold]{export.export_name}[/bold]")
+                console.print(f"  [cyan]Ã¢Â¬Â¢[/cyan] CUR/Data Export found: [bold]{export.export_name}[/bold]")
                 console.print(f"    [dim]{export.s3_uri}[/dim]")
             else:
-                console.print(f"  [dim]  ─[/dim] [dim]CUR found but S3 not accessible: {export.export_name}[/dim]")
+                console.print(f"  [dim]  Ã¢â€â‚¬[/dim] [dim]CUR found but S3 not accessible: {export.export_name}[/dim]")
     except Exception:
-        # CUR discovery is best-effort — never block on errors
+        # CUR discovery is best-effort Ã¢â‚¬â€ never block on errors
         pass
     
     return result
 
+
+def mask_arn(arn: str | None) -> str | None:
+    """Mask the account component embedded in an AWS ARN."""
+    if not arn:
+        return arn
+    parts = arn.split(":")
+    if len(parts) > 4:
+        parts[4] = mask_account_id(parts[4]) or parts[4]
+    return ":".join(parts)
 
 def mask_account_id(account_id: str) -> str:
     """Mask an account ID: show first 5 + '***' + last 4 digits.
@@ -290,9 +299,10 @@ def run_preflight_deep(
             errors=errors,
         )
 
-    # 2. Probe each pack
+    # 2. Probe each unique capability once
+    probe_cache = {}
     for pack_name in PACK_PROBES:
-        result = assess_pack_readiness(session, pack_name)
+        result = assess_pack_readiness(session, pack_name, probe_cache)
         packs[pack_name] = result
 
         # Aggregate per-service permissions
@@ -346,7 +356,7 @@ def deep_result_to_json(result: PreflightDeepResult) -> Dict[str, Any]:
 
     return {
         "identity": {
-            "arn": result.identity.get("arn", ""),
+            "arn": mask_arn(result.identity.get("arn", "")),
             "account_id": masked_account,
             "partition": result.identity.get("partition", "aws"),
         },
@@ -354,7 +364,7 @@ def deep_result_to_json(result: PreflightDeepResult) -> Dict[str, Any]:
             "name": result.workspace.get("name"),
             "payer_account_id": mask_account_id(result.workspace.get("payer_account_id") or ""),
         },
-        "connections": result.workspace.get("connections", []),
+        "connections": _mask_connections(result.workspace.get("connections", [])),
         "permissions": dict(result.permissions),
         "data_sources": dict(result.data_sources),
         "packs": packs_json,
@@ -362,6 +372,18 @@ def deep_result_to_json(result: PreflightDeepResult) -> Dict[str, Any]:
         "errors": list(result.errors),
     }
 
+
+def _mask_connections(connections: list[dict]) -> list[dict]:
+    masked = []
+    for connection in connections:
+        item = dict(connection)
+        for key in ("account_id", "session_account_id", "payer_account_id"):
+            if key in item:
+                item[key] = mask_account_id(item[key])
+        if item.get("role_arn"):
+            item["role_arn"] = mask_arn(item["role_arn"])
+        masked.append(item)
+    return masked
 
 def basic_result_to_json(
     passed: bool,

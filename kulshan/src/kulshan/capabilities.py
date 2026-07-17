@@ -267,7 +267,7 @@ def probe_capability(session: Any, probe: ServiceProbe) -> CapabilityResult:
         )
 
 
-def assess_pack_readiness(session: Any, pack: str) -> PackReadinessResult:
+def assess_pack_readiness(session: Any, pack: str, cache: dict[tuple[str, str, str, str], CapabilityResult] | None = None) -> PackReadinessResult:
     """Probe all capabilities for a pack and determine overall readiness.
 
     Returns:
@@ -282,6 +282,14 @@ def assess_pack_readiness(session: Any, pack: str) -> PackReadinessResult:
 
     results: list[CapabilityResult] = []
     for probe in probes:
+        key = (probe.service, probe.method, probe.region, repr(sorted(probe.kwargs.items())))
+        if cache is not None and key in cache:
+            results.append(cache[key])
+            continue
+        result = probe_capability(session, probe)
+        if cache is not None:
+            cache[key] = result
+        results.append(result)
         results.append(probe_capability(session, probe))
 
     available_count = sum(1 for r in results if r.status == "available")
@@ -311,9 +319,9 @@ def assess_pack_readiness(session: Any, pack: str) -> PackReadinessResult:
 
 
 def assess_all_packs(session: Any) -> dict[str, PackReadinessResult]:
-    """Assess readiness for all defined packs."""
-    return {pack: assess_pack_readiness(session, pack) for pack in PACK_PROBES}
-
+    """Assess all packs with one probe per unique capability."""
+    cache: dict[tuple[str, str, str, str], CapabilityResult] = {}
+    return {pack: assess_pack_readiness(session, pack, cache) for pack in PACK_PROBES}
 
 def mask_account_id(account_id: str | None) -> str | None:
     """Mask an AWS account ID for display: show first 5 + *** + last 4."""
