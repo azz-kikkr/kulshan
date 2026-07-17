@@ -1,6 +1,6 @@
 # Kulshan
 
-The great white watcher for your AWS account.
+Read-only AWS audit CLI.
 
 ```bash
 pip install kulshan
@@ -13,13 +13,13 @@ One command. One report. Zero writes to your AWS account.
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE.txt)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://python.org)
 
-[Documentation](https://github.com/azz-kikkr/kulshan/tree/master/docs) | [IAM Policy](https://github.com/azz-kikkr/kulshan/blob/master/iam/kulshan-readonly.json) | [Changelog](https://github.com/azz-kikkr/kulshan/blob/master/CHANGELOG.md)
+[Documentation](https://github.com/MissionFinOps/kulshan/tree/master/kulshan/docs) | [IAM Policy](https://github.com/MissionFinOps/kulshan/blob/master/kulshan/iam/kulshan-readonly.json) | [Changelog](https://github.com/MissionFinOps/kulshan/blob/master/kulshan/CHANGELOG.md)
 
 ---
 
 ## What Kulshan does
 
-Ten read-only audit packs in one CLI. Cost anomalies, security posture, waste detection, DR gaps, drift, tag compliance, observability blind spots, quota headroom, and network topology — scored 0-100, exportable as HTML, JSON, SARIF, or CSV.
+Ten read-only audit packs in one CLI. Cost anomalies, security posture, waste detection, DR gaps, drift, tag compliance, observability blind spots, quota headroom, and network topology - scored 0-100, exportable as HTML, JSON, SARIF, or CSV.
 
 Reads your Cost Explorer data and your own CUR/Data Export Parquet files in place. No data leaves your machine. No SaaS account. No telemetry. Nothing to opt out of, because nothing exists.
 
@@ -102,7 +102,7 @@ When CUR data reveals a payer account, the environment binds to that payer. Mult
 kulshan workspace reconcile
 ```
 
-Workspaces with multiple connections produce consolidated reports automatically — one scan, all connections, deduplicated findings, per-connection coverage metadata.
+Workspaces with multiple connections produce consolidated reports automatically - one scan, all connections, deduplicated findings, per-connection coverage metadata.
 
 ---
 
@@ -161,7 +161,7 @@ Account IDs redacted by default. `--show-pii` for full IDs. Atomic writes preven
 kulshan report --packs security --format sarif -o results.sarif --yes --no-history
 ```
 
-Exit code 1 when critical findings are present — use as a quality gate. SARIF uploads to GitHub Code Scanning. Full GitHub Actions and GitLab CI examples in [docs/ci-cd.md](https://github.com/azz-kikkr/kulshan/blob/master/docs/ci-cd.md).
+Exit code 1 when critical findings are present - use as a quality gate. SARIF uploads to GitHub Code Scanning. Full GitHub Actions and GitLab CI examples in [docs/ci-cd.md](https://github.com/MissionFinOps/kulshan/blob/master/docs/ci-cd.md).
 
 ---
 
@@ -169,11 +169,11 @@ Exit code 1 when critical findings are present — use as a quality gate. SARIF 
 
 > Read-only by construction, not read-only by default. There is no cleanup mode to leave off, no write path to enable. The published IAM policy contains zero actions that create, modify, or delete resources.
 
-- 147 read-only actions, zero write actions. [Read every line.](https://github.com/azz-kikkr/kulshan/blob/master/iam/kulshan-readonly.json)
+- 147 read-only actions, zero write actions. [Read every line.](https://github.com/MissionFinOps/kulshan/blob/master/iam/kulshan-readonly.json)
 - Reports stay on your machine
 - No telemetry, no phone-home
 - Open source: Apache 2.0. IAM policy additionally CC BY 4.0.
-- Per-pack least-privilege policies at [`iam/per-check/`](https://github.com/azz-kikkr/kulshan/tree/master/iam/per-check)
+- Per-pack least-privilege policies at [`iam/per-check/`](https://github.com/MissionFinOps/kulshan/tree/master/iam/per-check)
 - Compliance metadata: CIS, SOC 2, NIST 800-53, Well-Architected
 
 ---
@@ -206,13 +206,13 @@ Cost pack: ~$0.15 (CE API at $0.01/request). All other packs use free APIs. Kuls
 
 ## About the Name
 
-Kulshan is the Lummi name for the mountain known colonially as Mt. Baker — meaning "great white watcher." We acknowledge the Lummi and Nooksack peoples as the original namers of this mountain.
+Kulshan is the Lummi name for the mountain known colonially as Mt. Baker. We acknowledge the Lummi and Nooksack peoples as the original namers of this mountain.
 
 ---
 
 ## Maintained by
 
-[Mission FinOps](https://missionfinops.com) — open-source AWS audit tooling.
+[Mission FinOps](https://missionfinops.com) - open-source AWS audit tooling.
 
 ---
 

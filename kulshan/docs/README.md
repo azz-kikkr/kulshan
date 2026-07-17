@@ -21,4 +21,4 @@ Version 0.3.1 | [GitHub](https://github.com/azz-kikkr/kulshan) | [PyPI](https://
 
 Read-only by construction. Local-first. No telemetry. Apache 2.0.
 
-Built by [Mission FinOps](https://missionfinops.com) — Mission, BC, Canada.
+Built by [Mission FinOps](https://missionfinops.com).

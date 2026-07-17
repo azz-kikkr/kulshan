@@ -1,6 +1,6 @@
 # Kulshan
 
-The great white watcher for your AWS account.
+Read-only AWS audit CLI.
 
 ```bash
 pip install kulshan
@@ -19,7 +19,7 @@ One command. One report. Zero writes to your AWS account.
 
 ## What Kulshan does
 
-Ten read-only audit packs in one CLI. Cost anomalies, security posture, waste detection, DR gaps, drift, tag compliance, observability blind spots, quota headroom, and network topology — scored 0-100, exportable as HTML, JSON, SARIF, or CSV.
+Ten read-only audit packs in one CLI. Cost anomalies, security posture, waste detection, DR gaps, drift, tag compliance, observability blind spots, quota headroom, and network topology - scored 0-100, exportable as HTML, JSON, SARIF, or CSV.
 
 Reads your Cost Explorer data and your own CUR/Data Export Parquet files in place. No data leaves your machine. No SaaS account. No telemetry. Nothing to opt out of, because nothing exists.
 
@@ -96,13 +96,13 @@ kulshan mcp-serve                       # MCP server for AI agents
 
 ## About the Name
 
-Kulshan is the Lummi name for the mountain known colonially as Mt. Baker — meaning "great white watcher." We acknowledge the Lummi and Nooksack peoples as the original namers of this mountain.
+Kulshan is the Lummi name for the mountain known colonially as Mt. Baker. We acknowledge the Lummi and Nooksack peoples as the original namers of this mountain.
 
 ---
 
 ## Maintained by
 
-[Mission FinOps](https://missionfinops.com) — open-source AWS audit tooling.
+[Mission FinOps](https://missionfinops.com) - open-source AWS audit tooling.
 
 ---
 
