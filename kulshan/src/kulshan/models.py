@@ -614,53 +614,7 @@ class ScanResult:
         )
 
 
-# ---------------------------------------------------------------------------
-# AINarrative
-# ---------------------------------------------------------------------------
 
-@dataclass(slots=True)
-class AINarrative:
-    """Container for all SLM-generated text."""
-
-    executive_summary: Optional[str] = None
-    cost_story: Optional[str] = None
-    anomaly_explanations: List[str] = field(default_factory=list)
-    risk_narrative: Optional[str] = None
-    waste_summary: Optional[str] = None
-    remediation_justifications: List[str] = field(default_factory=list)
-    model_name: Optional[str] = None
-    backend: Optional[str] = None
-    generation_seconds: Optional[float] = None
-    validation_warnings: List[str] = field(default_factory=list)
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "executive_summary": self.executive_summary,
-            "cost_story": self.cost_story,
-            "anomaly_explanations": list(self.anomaly_explanations),
-            "risk_narrative": self.risk_narrative,
-            "waste_summary": self.waste_summary,
-            "remediation_justifications": list(self.remediation_justifications),
-            "model_name": self.model_name,
-            "backend": self.backend,
-            "generation_seconds": self.generation_seconds,
-            "validation_warnings": list(self.validation_warnings),
-        }
-
-    @classmethod
-    def from_dict(cls, d: Dict[str, Any]) -> AINarrative:
-        return cls(
-            executive_summary=d.get("executive_summary"),
-            cost_story=d.get("cost_story"),
-            anomaly_explanations=list(d.get("anomaly_explanations", [])),
-            risk_narrative=d.get("risk_narrative"),
-            waste_summary=d.get("waste_summary"),
-            remediation_justifications=list(d.get("remediation_justifications", [])),
-            model_name=d.get("model_name"),
-            backend=d.get("backend"),
-            generation_seconds=d.get("generation_seconds"),
-            validation_warnings=list(d.get("validation_warnings", [])),
-        )
 
 
 # ---------------------------------------------------------------------------
@@ -726,7 +680,6 @@ class CombinedScanResult:
     category_results: Dict[str, ScanResult] = field(default_factory=dict)
     overall_score: int = 0
     overall_grade: str = "F"
-    ai_narrative: Optional[AINarrative] = None
     ranked_remediations: List[RemediationAction] = field(default_factory=list)
     tier_at_scan: Tier = Tier.FREE
     suite_version: str = "0.1.0"
@@ -746,7 +699,6 @@ class CombinedScanResult:
             },
             "overall_score": self.overall_score,
             "overall_grade": self.overall_grade,
-            "ai_narrative": self.ai_narrative.to_dict() if self.ai_narrative else None,
             "ranked_remediations": [r.to_dict() for r in self.ranked_remediations],
             "tier_at_scan": self.tier_at_scan.value,
             "suite_version": self.suite_version,
@@ -754,7 +706,6 @@ class CombinedScanResult:
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> CombinedScanResult:
-        ai = d.get("ai_narrative")
         return cls(
             combined_scan_id=d["combined_scan_id"],
             started_at=_str_to_ts(d["started_at"]),  # type: ignore[arg-type]
@@ -768,7 +719,6 @@ class CombinedScanResult:
             },
             overall_score=d.get("overall_score", 0),
             overall_grade=d.get("overall_grade", "F"),
-            ai_narrative=AINarrative.from_dict(ai) if ai else None,
             ranked_remediations=[
                 RemediationAction.from_dict(r)
                 for r in d.get("ranked_remediations", [])
@@ -874,7 +824,6 @@ class ScanHistoryRecord:
     high_findings: int = 0
     total_monthly_waste_usd: Optional[Decimal] = None
     total_monthly_cost_usd: Optional[Decimal] = None
-    ai_narrative_enabled: bool = False
     full_result_json: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
@@ -896,7 +845,6 @@ class ScanHistoryRecord:
             "high_findings": self.high_findings,
             "total_monthly_waste_usd": _decimal_to_str(self.total_monthly_waste_usd),
             "total_monthly_cost_usd": _decimal_to_str(self.total_monthly_cost_usd),
-            "ai_narrative_enabled": self.ai_narrative_enabled,
             "full_result_json": self.full_result_json,
         }
 
@@ -920,7 +868,6 @@ class ScanHistoryRecord:
             high_findings=d.get("high_findings", 0),
             total_monthly_waste_usd=_str_to_decimal(d.get("total_monthly_waste_usd")),
             total_monthly_cost_usd=_str_to_decimal(d.get("total_monthly_cost_usd")),
-            ai_narrative_enabled=d.get("ai_narrative_enabled", False),
             full_result_json=d.get("full_result_json"),
         )
 
@@ -942,7 +889,6 @@ class TelemetryEvent:
     success: bool
     duration_ms: Optional[float] = None
     error_class: Optional[str] = None
-    slm_backend: Optional[str] = None
     tier: Tier = Tier.FREE
     install_id: str = ""
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
@@ -958,7 +904,6 @@ class TelemetryEvent:
             "success": self.success,
             "duration_ms": self.duration_ms,
             "error_class": self.error_class,
-            "slm_backend": self.slm_backend,
             "tier": self.tier.value,
             "install_id": self.install_id,
             "timestamp": _ts_to_str(self.timestamp),
@@ -980,7 +925,6 @@ class TelemetryEvent:
             success=d["success"],
             duration_ms=d.get("duration_ms"),
             error_class=d.get("error_class"),
-            slm_backend=d.get("slm_backend"),
             tier=Tier(d.get("tier", "free")),
             install_id=d.get("install_id", ""),
             timestamp=_str_to_ts(d["timestamp"]),  # type: ignore[arg-type]
@@ -1046,14 +990,6 @@ class SuiteConfig:
     default_format: str = "html"
     report_dir: str = "."
 
-    # [slm]
-    slm_backend: str = "llama-cpp"
-    slm_model_repo: str = "Qwen/Qwen3-4B-Instruct-2507-GGUF"
-    slm_quantization: str = "Q4_K_M"
-    slm_temperature: float = 0.3
-    slm_max_tokens: int = 512
-    slm_model_path: Optional[str] = None
-
     # [license]
     license_key: Optional[str] = None
     license_email: Optional[str] = None
@@ -1083,14 +1019,6 @@ class SuiteConfig:
             "output": {
                 "default_format": self.default_format,
                 "report_dir": self.report_dir,
-            },
-            "slm": {
-                "backend": self.slm_backend,
-                "model_repo": self.slm_model_repo,
-                "quantization": self.slm_quantization,
-                "temperature": self.slm_temperature,
-                "max_tokens": self.slm_max_tokens,
-                "model_path": self.slm_model_path,
             },
             "license": {
                 "key": self.license_key,

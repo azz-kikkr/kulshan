@@ -79,7 +79,6 @@ src/kulshan/
 ├── mcp_server/            # MCP protocol server
 │   ├── server.py          # MCP server implementation
 │   └── tools.py           # Tool definitions
-├── slm/                   # Local SLM integration
 ├── trust/                 # Trust/verification utilities
 ├── license/               # License management
 ├── telemetry/             # Telemetry (placeholder, inactive)

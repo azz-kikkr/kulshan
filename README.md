@@ -40,7 +40,7 @@ Reads your Cost Explorer data and your own CUR/Data Export Parquet files in plac
 pip install kulshan
 ```
 
-Python 3.9+. macOS, Linux, Windows. Optional extras: `kulshan[mcp]`, `kulshan[pdf]`, `kulshan[excel]`, `kulshan[pptx]`, `kulshan[slm]`, or `kulshan[all]`.
+Python 3.9+. macOS, Linux, Windows. Optional extras: `kulshan[mcp]`, `kulshan[pdf]`, `kulshan[excel]`, `kulshan[pptx]`, or `kulshan[all]`.
 
 ---
 

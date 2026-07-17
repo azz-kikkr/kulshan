@@ -13,10 +13,6 @@ class SessionError(SuiteError):
     """Raised when a boto3 session cannot be created or a role cannot be assumed."""
 
 
-class SLMError(SuiteError):
-    """Raised when the SLM engine encounters an unrecoverable problem."""
-
-
 class LicenseError(SuiteError):
     """Raised for license validation failures."""
 

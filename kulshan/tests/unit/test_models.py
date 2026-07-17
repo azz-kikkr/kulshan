@@ -11,7 +11,6 @@ from decimal import Decimal
 import pytest
 
 from kulshan.models import (
-    AINarrative,
     Category,
     CategoryScore,
     CIThresholds,
@@ -247,11 +246,6 @@ def _make_combined() -> CombinedScanResult:
         },
         overall_score=80,
         overall_grade="B",
-        ai_narrative=AINarrative(
-            executive_summary="All good.",
-            model_name="test",
-            backend="mock",
-        ),
         ranked_remediations=[
             RemediationAction(
                 finding_id="f-001",
@@ -278,8 +272,6 @@ class TestCombinedScanResult:
         assert restored.tier_at_scan == original.tier_at_scan
         assert len(restored.category_results) == len(original.category_results)
         assert len(restored.ranked_remediations) == len(original.ranked_remediations)
-        assert restored.ai_narrative is not None
-        assert restored.ai_narrative.executive_summary == "All good."
 
     def test_to_dict_from_dict_roundtrip(self):
         original = _make_combined()
@@ -294,14 +286,6 @@ class TestCombinedScanResult:
         parsed = json.loads(c.to_json())
         assert isinstance(parsed, dict)
         assert "combined_scan_id" in parsed
-
-    def test_no_narrative(self):
-        c = _make_combined()
-        # Rebuild without narrative using from_dict
-        d = c.to_dict()
-        d["ai_narrative"] = None
-        restored = CombinedScanResult.from_dict(d)
-        assert restored.ai_narrative is None
 
 
 # ---------------------------------------------------------------------------
@@ -395,7 +379,6 @@ class TestCIThresholds:
 class TestSuiteConfig:
     def test_defaults(self):
         cfg = SuiteConfig()
-        assert cfg.slm_backend == "llama-cpp"
         assert cfg.telemetry_enabled is False
         assert cfg.aws_regions == ["us-east-1"]
 
@@ -403,7 +386,6 @@ class TestSuiteConfig:
         cfg = SuiteConfig()
         d = cfg.to_dict()
         assert "aws" in d
-        assert "slm" in d
         assert "telemetry" in d
         assert "ci" in d
         assert "ui" in d

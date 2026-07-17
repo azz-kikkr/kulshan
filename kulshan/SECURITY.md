@@ -38,7 +38,6 @@ that is a critical security issue and should be reported immediately.
 ## Security Design Principles
 
 1. **Non-mutating AWS access**: No infrastructure remediation or resource changes
-2. **Local-only AI**: SLM inference runs on your machine, never in the cloud
-3. **Local-first defaults**: No telemetry implementation is active; optional integrations require explicit invocation
-4. **Offline license validation**: JWT verification uses a bundled public key
-5. **No credential storage**: Kulshan uses your existing AWS credential chain
+2. **Local-first defaults**: No telemetry implementation is active; optional integrations require explicit invocation
+3. **Offline license validation**: JWT verification uses a bundled public key
+4. **No credential storage**: Kulshan uses your existing AWS credential chain

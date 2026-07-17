@@ -12,7 +12,6 @@ from decimal import Decimal
 from hypothesis import given, settings, strategies as st
 
 from kulshan.models import (
-    AINarrative,
     Category,
     CategoryScore,
     CombinedScanResult,
@@ -163,24 +162,6 @@ def remediation_strategy(draw):
 
 
 @st.composite
-def ai_narrative_strategy(draw):
-    return AINarrative(
-        executive_summary=draw(st.one_of(st.none(), safe_text)),
-        cost_story=draw(st.one_of(st.none(), safe_text)),
-        anomaly_explanations=draw(st.lists(safe_text, max_size=3)),
-        risk_narrative=draw(st.one_of(st.none(), safe_text)),
-        waste_summary=draw(st.one_of(st.none(), safe_text)),
-        remediation_justifications=draw(st.lists(safe_text, max_size=3)),
-        model_name=draw(st.one_of(st.none(), identifiers)),
-        backend=draw(st.one_of(st.none(), st.sampled_from(["llama-cpp", "ollama"]))),
-        generation_seconds=draw(
-            st.one_of(st.none(), st.floats(min_value=0, max_value=300, allow_nan=False, allow_infinity=False))
-        ),
-        validation_warnings=draw(st.lists(safe_text, max_size=2)),
-    )
-
-
-@st.composite
 def combined_scan_result_strategy(draw):
     start = draw(timestamps)
     dur = draw(st.floats(min_value=0.1, max_value=600.0, allow_nan=False, allow_infinity=False))
@@ -205,7 +186,6 @@ def combined_scan_result_strategy(draw):
         category_results=cat_results,
         overall_score=overall,
         overall_grade=CategoryScore.score_to_grade(overall),
-        ai_narrative=draw(st.one_of(st.none(), ai_narrative_strategy())),
         ranked_remediations=draw(st.lists(remediation_strategy(), max_size=3)),
         tier_at_scan=draw(tiers),
         suite_version="0.1.0",
@@ -289,10 +269,3 @@ class TestCombinedScanResultRoundTrip:
 
         # Remediations
         assert len(restored.ranked_remediations) == len(csr.ranked_remediations)
-
-        # AI narrative
-        if csr.ai_narrative is None:
-            assert restored.ai_narrative is None
-        else:
-            assert restored.ai_narrative is not None
-            assert restored.ai_narrative.executive_summary == csr.ai_narrative.executive_summary

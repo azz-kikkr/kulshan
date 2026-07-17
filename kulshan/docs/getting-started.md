@@ -40,9 +40,6 @@ pip install kulshan[excel]
 # PowerPoint export
 pip install kulshan[pptx]
 
-# Local SLM narratives (llama-cpp)
-pip install kulshan[slm]
-
 # MCP server for agent integration
 pip install kulshan[mcp]
 

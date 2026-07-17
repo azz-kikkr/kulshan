@@ -50,10 +50,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-slm = [
-    "llama-cpp-python>=0.3",
-    "huggingface-hub>=0.20",
-]
 pdf = ["weasyprint>=60.0"]
 excel = ["openpyxl>=3.1.0"]
 pptx = ["python-pptx>=0.6.21"]
@@ -67,7 +63,7 @@ dev = [
     "moto[ec2,iam,s3,rds,ce,sts,organizations]>=5.0",
     "jsonschema>=4.20",
 ]
-all = ["kulshan[slm,pdf,excel,pptx,mcp]"]
+all = ["kulshan[pdf,excel,pptx,mcp]"]
 
 [project.scripts]
 kulshan = "kulshan.cli:main"
