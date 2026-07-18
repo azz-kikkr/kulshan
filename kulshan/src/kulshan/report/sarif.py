@@ -1,4 +1,4 @@
-"""SARIF 2.1.0 export for Kulshan findings.
+﻿"""SARIF 2.1.0 export for Kulshan findings.
 
 Maps Kulshan findings to the Static Analysis Results Interchange Format
 for integration with GitHub Code Scanning, VS Code SARIF Viewer, and CI/CD
@@ -14,7 +14,7 @@ from typing import Any, Dict, List
 from kulshan.__version__ import __version__
 
 
-# Kulshan severity → SARIF level mapping
+# Kulshan severity â†’ SARIF level mapping
 SEVERITY_TO_SARIF_LEVEL = {
     "critical": "error",
     "high": "error",
@@ -23,7 +23,7 @@ SEVERITY_TO_SARIF_LEVEL = {
     "info": "note",
 }
 
-# Kulshan pack → SARIF tool component
+# Kulshan pack â†’ SARIF tool component
 PACK_DESCRIPTIONS = {
     "cost": "AWS cost analysis and anomaly detection",
     "security": "IAM, network, encryption, and logging posture checks",
@@ -174,3 +174,4 @@ def to_sarif_json(findings: List[dict], **kwargs) -> str:
     """Convert findings to a SARIF JSON string."""
     doc = findings_to_sarif(findings, **kwargs)
     return json.dumps(doc, indent=2, default=str)
+

@@ -116,6 +116,7 @@ def generate_html_report(
     top_actions: Optional[List[dict]] = None,
     synthetic_sample: bool = False,
     coverage: Optional[dict] = None,
+    billing_data_integrity: Optional[dict] = None,
 ) -> str:
     """Return a complete self-contained HTML string for the Kulshan Report.
 
@@ -153,8 +154,9 @@ def generate_html_report(
     # Synthetic-sample banner: opt-in, default off.
     synthetic_banner_html = _SYNTHETIC_BANNER_HTML if synthetic_sample else ""
     coverage_html = _build_coverage_summary(coverage)
+    integrity_html = _build_integrity_summary(billing_data_integrity)
 
-    # Cost Health Score (small, contextual — not a hero dial)
+    # Cost Health Score (small, contextual Ã¢â‚¬â€ not a hero dial)
     score_label = "Cost Health Score" if ran_packs == ["cost"] else "Overall Score"
 
     return _HTML_TEMPLATE.format(
@@ -177,10 +179,22 @@ def generate_html_report(
         spend_trend=spend_trend_html,
         detailed_breakdown=details_html,
         synthetic_banner=synthetic_banner_html,
-        coverage_summary=coverage_html,
+        coverage_summary=coverage_html + integrity_html,
     )
 
 
+def _build_integrity_summary(integrity: Optional[dict]) -> str:
+    if not integrity:
+        return ""
+    status = html.escape(str(integrity.get("status", "unknown")))
+    finality = html.escape(str(integrity.get("period_finality", "unknown")))
+    reasons = integrity.get("reasons", [])
+    body = ""
+    if status == "suspect":
+        body = "<p><strong>Possible upstream AWS billing-data issue. Do not take remediation action based only on this report.</strong></p>"
+    if reasons:
+        body += "<ul>" + "".join(f"<li>{html.escape(str(r))}</li>" for r in reasons) + "</ul>"
+    return f'<section class="coverage-section"><h2>Billing data integrity</h2><p>Status: <strong>{status}</strong> Â· Period: {finality}</p>{body}</section>'
 def _build_coverage_summary(coverage: Optional[dict]) -> str:
     """Render the canonical coverage disclosure without exposing identifiers."""
     if not coverage:
@@ -195,7 +209,7 @@ def _build_coverage_summary(coverage: Optional[dict]) -> str:
     warning_html = "".join(f"<li>{html.escape(str(item))}</li>" for item in warnings)
     return (
         '<section class="coverage-section"><h2>Coverage</h2>'
-        f'<p>Status: <strong>{status}</strong> · {completed}/{attempted} packs · {regions} regions · {denied} denied actions</p>'
+        f'<p>Status: <strong>{status}</strong> Ã‚Â· {completed}/{attempted} packs Ã‚Â· {regions} regions Ã‚Â· {denied} denied actions</p>'
         f'{"<ul>" + warning_html + "</ul>" if warning_html else ""}'
         '</section>'
     )
@@ -329,7 +343,7 @@ def _build_tool_details(results: dict) -> str:
     return "\n".join(sections)
 
 
-# ── Commitment KPI + Money on Fire sections ──────────────────────────────────
+# Ã¢â€â‚¬Ã¢â€â‚¬ Commitment KPI + Money on Fire sections Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 
 def _build_commitment_kpi(results: dict) -> str:
@@ -443,7 +457,7 @@ def _build_money_on_fire(results: dict, top_actions: list) -> str:
     return (
         '<div class="money-on-fire">\n'
         f'<div class="mof-hero">'
-        f'<span class="mof-icon">🔥</span>'
+        f'<span class="mof-icon">Ã°Å¸â€Â¥</span>'
         f'<span class="mof-total">${total_savings:,.0f}<span class="mof-per">/month</span></span>'
         f'</div>\n'
         f'<div class="mof-subtitle">Total addressable savings identified</div>\n'
@@ -452,11 +466,11 @@ def _build_money_on_fire(results: dict, top_actions: list) -> str:
     )
 
 
-# ── Phase 6C-2: top actions + cost findings + overlap helpers ────────────────
+# Ã¢â€â‚¬Ã¢â€â‚¬ Phase 6C-2: top actions + cost findings + overlap helpers Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 
 def _source_label(kind: str) -> str:
-    """Map finding kind → display source label. Mirrors terminal renderer."""
+    """Map finding kind Ã¢â€ â€™ display source label. Mirrors terminal renderer."""
     if isinstance(kind, str) and kind.startswith("anomaly_aws_native"):
         return "AWS"
     return "Kulshan"
@@ -484,7 +498,7 @@ def _truncate(text: str, max_len: int = 200) -> str:
         text = str(text)
     if len(text) <= max_len:
         return text
-    return text[: max_len - 1].rstrip() + "…"
+    return text[: max_len - 1].rstrip() + "Ã¢â‚¬Â¦"
 
 
 def _build_top_actions_section(top_actions: List[dict]) -> str:
@@ -718,7 +732,7 @@ def _build_overlap_summary(cad: dict) -> str:
 
     return (
         '<div class="overlap-summary">'
-        f'<div class="overlap-status">{" · ".join(status_bits)}</div>'
+        f'<div class="overlap-status">{" Ã‚Â· ".join(status_bits)}</div>'
         '<div class="overlap-counts">'
         f'<span class="ovc-both">{both} confirmed by Kulshan</span>'
         f'<span class="ovc-reck">{reck_only} Kulshan-only</span>'
@@ -729,7 +743,7 @@ def _build_overlap_summary(cad: dict) -> str:
     )
 
 
-# ── New Report IA: Executive Summary, What To Do Next, etc. ───────────────────
+# Ã¢â€â‚¬Ã¢â€â‚¬ New Report IA: Executive Summary, What To Do Next, etc. Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 
 def _build_executive_summary(results: dict, overall_score: int, overall_grade: str, top_actions: list) -> str:
@@ -762,9 +776,9 @@ def _build_executive_summary(results: dict, overall_score: int, overall_grade: s
     committed_pct = purchase_mix.get("committed_pct", 0)
     on_demand_pct = purchase_mix.get("on_demand_pct", 0)
     if on_demand_pct > 50 and total_spend > 1:
-        sentences.append(f"{on_demand_pct:.0f}% of spend is on-demand — commitment strategy recommended.")
+        sentences.append(f"{on_demand_pct:.0f}% of spend is on-demand Ã¢â‚¬â€ commitment strategy recommended.")
     elif committed_pct > 60:
-        sentences.append(f"{committed_pct:.0f}% of spend is committed — good coverage.")
+        sentences.append(f"{committed_pct:.0f}% of spend is committed Ã¢â‚¬â€ good coverage.")
 
     # Savings
     total_savings = sum(float(a.get("estimated_monthly_impact", 0) or 0) for a in top_actions if float(a.get("estimated_monthly_impact", 0) or 0) > 0)
@@ -793,7 +807,7 @@ def _build_executive_summary(results: dict, overall_score: int, overall_grade: s
 
 
 def _build_what_to_do_next(top_actions: list, ran_packs: list) -> str:
-    """Build the 'What To Do Next' section — prioritized actions table."""
+    """Build the 'What To Do Next' section Ã¢â‚¬â€ prioritized actions table."""
     if not top_actions:
         return ""
 
@@ -817,7 +831,7 @@ def _build_what_to_do_next(top_actions: list, ran_packs: list) -> str:
             elif pack in ("pulse", "drift"):
                 impact = "Visibility"
             else:
-                impact = "—"
+                impact = "Ã¢â‚¬â€"
 
         effort = str(f.get("effort", "medium")).capitalize()
 
@@ -877,7 +891,7 @@ def _build_commitment_health(results: dict) -> str:
     def _bar(label: str, value: float, target: float, max_score: float, actual_score: float) -> str:
         pct = min(100, max(0, value))
         color = "#2e7d32" if pct >= target else "#f57f17" if pct >= target * 0.7 else "#c62828"
-        status = "✓" if pct >= target * 0.9 else ""
+        status = "Ã¢Å“â€œ" if pct >= target * 0.9 else ""
         return (
             f'<div class="kpi-row">'
             f'<span class="kpi-label">{label}</span>'
@@ -906,7 +920,7 @@ def _build_commitment_health(results: dict) -> str:
 
     # Assessment
     if on_demand_pct > 70:
-        parts.append('<p class="kpi-assessment">Heavy on-demand exposure — consider Savings Plans or Reserved Instances.</p>')
+        parts.append('<p class="kpi-assessment">Heavy on-demand exposure Ã¢â‚¬â€ consider Savings Plans or Reserved Instances.</p>')
     elif committed_pct > 60:
         parts.append('<p class="kpi-assessment">Good commitment coverage.</p>')
 
@@ -1018,7 +1032,7 @@ def _build_spend_trend(results: dict) -> str:
 
 
 def _build_detailed_breakdown(results: dict, ran_packs: list) -> str:
-    """Build Detailed Breakdown — only show packs that actually ran."""
+    """Build Detailed Breakdown Ã¢â‚¬â€ only show packs that actually ran."""
     if not ran_packs:
         return ""
 
@@ -1556,3 +1570,9 @@ _HTML_TEMPLATE = """\
 </body>
 </html>
 """
+
+
+
+
+
+

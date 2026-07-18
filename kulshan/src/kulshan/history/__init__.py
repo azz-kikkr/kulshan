@@ -1,4 +1,4 @@
-"""Scan history: SQLite WAL storage for local scan tracking and trend analysis.
+﻿"""Scan history: SQLite WAL storage for local scan tracking and trend analysis.
 
 Stores a summary of every scan in a local SQLite database. Enables:
 - `kulshan history` to show past scans
@@ -314,7 +314,7 @@ class HistoryStore:
             }
 
         try:
-            # Parent scan â€” account_id is NULL for consolidated scans
+            # Parent scan Ã¢â‚¬â€ account_id is NULL for consolidated scans
             conn.execute(
                 """INSERT INTO scans (id, timestamp, account_id, regions, duration_seconds,
                    overall_score, overall_grade, total_findings, critical_findings,
@@ -453,3 +453,4 @@ class HistoryStore:
         conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         conn.execute("VACUUM")
         return cursor.rowcount
+
