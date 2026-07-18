@@ -1004,7 +1004,7 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
             regions=regions,
             duration_secs=duration,
             top_actions=render_actions,
-            coverage=coverage,
+            coverage=coverage_payload,
         )
         html_filename = f"kulshan-report-{date.today().isoformat()}.html"
         if not show_pii:
