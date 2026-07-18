@@ -156,7 +156,7 @@ def test_registry_actions_present_in_policy():
 
 def test_policy_hash_matches_recorded():
     """SHA256 of the composed policy must match the recorded hash."""
-    content = COMPOSED_PATH.read_bytes()
+    content = COMPOSED_PATH.read_text(encoding="utf-8").replace("\r\n", "\n").encode("utf-8")
     actual_hash = hashlib.sha256(content).hexdigest()
     expected_hash = HASH_PATH.read_text(encoding="utf-8").strip()
     assert actual_hash == expected_hash, (

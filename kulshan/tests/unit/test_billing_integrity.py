@@ -1,4 +1,6 @@
-from kulshan.billing_integrity import assess_billing_integrity
+from datetime import date
+
+from kulshan.billing_integrity import assess_billing_integrity, build_report_billing_integrity
 
 
 def test_current_month_estimated_and_no_history():
@@ -37,3 +39,30 @@ def test_agreement_is_not_independent_verification():
     assert r.cross_source_agreement == 'agreement'
     assert 'not independent verification' in ' '.join(r.reasons).lower()
 
+def test_report_integrity_uses_existing_cost_evidence():
+    result = build_report_billing_integrity(
+        {
+            "cost": {
+                "scores": {"total_spend": 125.5},
+                "metadata": {
+                    "cur_investigation": {
+                        "month": "2026-07",
+                        "total_spend": 120.0,
+                    }
+                },
+            }
+        },
+        today=date(2026, 7, 17),
+        retrieved_at="2026-07-17T12:00:00+00:00",
+    )
+
+    assert result is not None
+    assert result["status"] == "provisional"
+    assert result["sources"] == ["cost_explorer", "cur"]
+    assert result["current_value"] == 125.5
+    assert result["cross_source_agreement"] == "not_available"
+    assert result["retrieved_at"] == "2026-07-17T12:00:00+00:00"
+
+
+def test_report_integrity_omitted_without_cost_evidence():
+    assert build_report_billing_integrity({"security": {"scores": {}}}) is None

@@ -89,6 +89,57 @@ def assess_billing_integrity(
     return BillingDataIntegrity(status, finality, list(sources or []), retrieved, comparison, source_agreement, effect, reasons, current_value, prior)
 
 
+def build_report_billing_integrity(
+    results: dict,
+    *,
+    today: Optional[date] = None,
+    retrieved_at: Optional[str] = None,
+) -> Optional[dict]:
+    """Build a billing-integrity disclosure from evidence already in a report.
+
+    Cost Explorer totals and CUR totals can cover different windows, so their
+    presence is disclosed without claiming that they independently agree.
+    """
+    cost_result = results.get("cost")
+    if not isinstance(cost_result, dict) or cost_result.get("skipped"):
+        return None
+
+    scores = cost_result.get("scores") or {}
+    metadata = cost_result.get("metadata") or {}
+    cur_metadata = metadata.get("cur_investigation")
+
+    sources: list[str] = []
+    current_value: Optional[float] = None
+
+    ce_total = scores.get("total_spend")
+    if ce_total is not None:
+        sources.append("cost_explorer")
+        current_value = float(ce_total)
+
+    if isinstance(cur_metadata, dict):
+        sources.append("cur")
+        if current_value is None and cur_metadata.get("total_spend") is not None:
+            current_value = float(cur_metadata["total_spend"])
+
+    if not sources:
+        return None
+
+    assessment_day = today or date.today()
+    period = (
+        str(cur_metadata.get("month"))
+        if isinstance(cur_metadata, dict) and cur_metadata.get("month")
+        else assessment_day.strftime("%Y-%m")
+    )
+    return assess_billing_integrity(
+        period=period,
+        current_value=current_value,
+        sources=sources,
+        retrieved_at=retrieved_at,
+        source_agreement="not_available",
+        today=assessment_day,
+    ).to_dict()
+
+
 
 
 
