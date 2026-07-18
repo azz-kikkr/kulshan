@@ -65,6 +65,7 @@ def _emit_output(
     console: Console,
     history_db_path: Optional[str] = None,
     coverage: Optional[dict] = None,
+    billing_data_integrity: Optional[dict] = None,
 ) -> None:
     """Shared output dispatch for report and convert commands."""
     from kulshan.redact import redact_account_id, redact_payload, redact_filename
@@ -103,6 +104,7 @@ def _emit_output(
             "overall_grade": overall_grade,
             "scan_metadata": scan_metadata,
             "coverage": coverage,
+            "billing_data_integrity": billing_data_integrity,
             "tools": results,
             "findings": all_findings,
             "top_actions": top_actions,
@@ -130,6 +132,7 @@ def _emit_output(
             duration_secs=duration,
             top_actions=render_actions,
             coverage=coverage,
+            billing_data_integrity=billing_data_integrity,
         )
         default_name = f"kulshan-report-{account_id}.html"
         out_path = output or (default_name if show_pii else redact_filename(default_name))
@@ -627,6 +630,10 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
                 "payer_account_id": consolidated.payer_account_id,
             }
 
+            from kulshan.billing_integrity import build_report_billing_integrity
+
+            billing_data_integrity = build_report_billing_integrity(results)
+
             _emit_output(
                 fmt=fmt, results=results, overall_score=overall_score,
                 overall_grade=overall_grade, account_id=account_id,
@@ -635,6 +642,7 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
                 all_findings=all_findings, output=output, show_pii=show_pii,
                 scan_metadata=scan_metadata, console=console,
                 history_db_path=ws_ctx.history_db_path,
+                billing_data_integrity=billing_data_integrity,
             )
 
             has_critical = any(
@@ -953,6 +961,9 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
         payer_account_id=getattr(ws_ctx, 'payer_account_id', None),
     )
     coverage_payload = coverage_report.to_dict()
+    from kulshan.billing_integrity import build_report_billing_integrity
+
+    billing_data_integrity = build_report_billing_integrity(results)
 
     if not no_history:
         try:
@@ -985,6 +996,7 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
         scan_metadata=scan_metadata, console=console,
         history_db_path=ws_ctx.history_db_path,
         coverage=coverage_payload,
+        billing_data_integrity=billing_data_integrity,
     )
 
     # Auto-save HTML report (redacted by default) unless user already exported HTML
@@ -1005,6 +1017,7 @@ def report(ctx: click.Context, quick: bool, fmt: str, output: Optional[str], day
             duration_secs=duration,
             top_actions=render_actions,
             coverage=coverage_payload,
+            billing_data_integrity=billing_data_integrity,
         )
         html_filename = f"kulshan-report-{date.today().isoformat()}.html"
         if not show_pii:
@@ -1890,6 +1903,7 @@ def convert(input_file: str, fmt: str, output: Optional[str], show_pii: bool) ->
     duration = payload.get("duration_seconds", 0)
     top_actions = payload.get("top_actions", [])
     coverage = payload.get("coverage")
+    billing_data_integrity = payload.get("billing_data_integrity")
 
     all_findings = []
     for pack_result in results.values():
@@ -1905,6 +1919,8 @@ def convert(input_file: str, fmt: str, output: Optional[str], show_pii: bool) ->
         regions=regions, duration=duration, top_actions=top_actions,
         all_findings=all_findings, output=output, show_pii=show_pii,
         scan_metadata=scan_metadata, console=console,
+        coverage=coverage,
+        billing_data_integrity=billing_data_integrity,
     )
 
 

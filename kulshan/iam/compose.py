@@ -36,9 +36,8 @@ def main():
             }
         ],
     }
-    OUTPUT_PATH.write_text(
-        json.dumps(policy, indent=4) + "\n", encoding="utf-8"
-    )
+    with OUTPUT_PATH.open("w", encoding="utf-8", newline="\n") as output_file:
+        output_file.write(json.dumps(policy, indent=4) + "\n")
     services = sorted({a.split(":")[0] for a in actions})
     print(f"Composed policy: {len(actions)} actions across {len(services)} services")
     print(f"Services: {', '.join(services)}")

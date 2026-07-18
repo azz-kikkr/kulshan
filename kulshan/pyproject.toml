@@ -120,7 +120,7 @@ markers = [
 "iam/policy-hash.txt" = "kulshan/iam/policy-hash.txt"
 
 [tool.hatch.build.targets.sdist.force-include]
-"iam/kulshan-readonly.json" = "kulshan/iam/kulshan-readonly.json"
-"iam/registry.json" = "kulshan/iam/registry.json"
-"iam/policy-hash.txt" = "kulshan/iam/policy-hash.txt"
+"iam/kulshan-readonly.json" = "iam/kulshan-readonly.json"
+"iam/registry.json" = "iam/registry.json"
+"iam/policy-hash.txt" = "iam/policy-hash.txt"
 
