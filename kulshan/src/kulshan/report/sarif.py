@@ -1,4 +1,4 @@
-﻿"""SARIF 2.1.0 export for Kulshan findings.
+"""SARIF 2.1.0 export for Kulshan findings.
 
 Maps Kulshan findings to the Static Analysis Results Interchange Format
 for integration with GitHub Code Scanning, VS Code SARIF Viewer, and CI/CD
@@ -44,6 +44,7 @@ def findings_to_sarif(
     regions: List[str] | None = None,
     version: str | None = None,
     coverage: Dict[str, Any] | None = None,
+    billing_data_integrity: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     """Convert a list of canonical Kulshan findings to a SARIF 2.1.0 document.
 
@@ -152,6 +153,7 @@ def findings_to_sarif(
                         "account_id": account_id,
                         "regions": regions,
                         "coverage": coverage or {},
+                        "billing_data_integrity": billing_data_integrity or {},
                     },
                 },
             },
@@ -162,6 +164,7 @@ def findings_to_sarif(
                     "account_id": account_id,
                     "regions": regions,
                         "coverage": coverage or {},
+                        "billing_data_integrity": billing_data_integrity or {},
                 },
             }],
         }],

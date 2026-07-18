@@ -314,7 +314,7 @@ class HistoryStore:
             }
 
         try:
-            # Parent scan Ã¢â‚¬â€ account_id is NULL for consolidated scans
+            # Parent scan ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â account_id is NULL for consolidated scans
             conn.execute(
                 """INSERT INTO scans (id, timestamp, account_id, regions, duration_seconds,
                    overall_score, overall_grade, total_findings, critical_findings,
