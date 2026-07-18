@@ -11,6 +11,11 @@ import time
 from typing import Optional
 
 import click
+
+from kulshan.console_compat import configure_windows_utf8
+
+configure_windows_utf8()
+
 from rich.console import Console
 
 from kulshan.__version__ import __version__

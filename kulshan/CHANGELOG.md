@@ -16,6 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-07-18
+
+### Fixed
+- Made Windows console output UTF-8 safe when the host terminal defaults to CP1252.
+- Isolated AWS and DuckDB-backed MCP calls in bounded child processes so timeouts cannot leave the MCP server hung.
+- Reported MCP domain failures as protocol tool errors instead of successful JSON envelopes.
+
 ## [0.3.4] - 2026-07-17
 
 ### Fixed
