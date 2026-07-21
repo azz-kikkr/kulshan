@@ -76,7 +76,7 @@
                 "rds:DescribeDBSubnetGroups",
                 "s3:GetAccountPublicAccessBlock",
                 "s3:GetBucketAcl",
-                "s3:GetBucketEncryption",
+                "s3:GetEncryptionConfiguration",
                 "s3:GetBucketLocation",
                 "s3:GetBucketLogging",
                 "s3:GetBucketPolicy",

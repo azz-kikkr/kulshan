@@ -4,10 +4,22 @@ from typing import Dict, List, Tuple
 from ..utils.aws import safe_api_call
 
 
+def _is_access_denied(err_str: str) -> bool:
+    """Return True if the error string indicates an IAM authorization failure."""
+    if not err_str:
+        return False
+    lower = err_str.lower()
+    return any(phrase in lower for phrase in (
+        "access denied", "accessdenied", "unauthorizedaccess",
+        "unauthorizedoperation",
+    ))
+
+
 def scan_storage(session, regions, progress=None, task_id=None) -> Tuple[Dict, List[str]]:
     """Audit S3 storage resilience."""
     findings = []
     errors = []
+    could_not_check = []
     stats = {
         "buckets": [],
         "no_versioning": [],
@@ -20,7 +32,16 @@ def scan_storage(session, regions, progress=None, task_id=None) -> Tuple[Dict, L
     resp, err = safe_api_call(s3, "list_buckets")
     if err:
         errors.append(f"S3: {err}")
-        return {"stats": stats, "findings": findings}, errors
+        if _is_access_denied(err):
+            could_not_check.append({
+                "result_state": "could_not_check",
+                "resource": "account-level",
+                "api_operation": "s3:ListBuckets",
+                "iam_action_required": "s3:ListAllMyBuckets",
+                "error_category": "access_denied",
+                "explanation": "Cannot list S3 buckets. Storage resilience was not evaluated.",
+            })
+        return {"stats": stats, "findings": findings, "could_not_check": could_not_check}, errors
 
     buckets = (resp or {}).get("Buckets", [])
 
@@ -30,29 +51,62 @@ def scan_storage(session, regions, progress=None, task_id=None) -> Tuple[Dict, L
 
         # Versioning
         ver_resp, ver_err = safe_api_call(s3, "get_bucket_versioning", Bucket=name)
-        if not ver_err and ver_resp:
+        if ver_err and _is_access_denied(ver_err):
+            could_not_check.append({
+                "result_state": "could_not_check",
+                "resource": name,
+                "api_operation": "s3:GetBucketVersioning",
+                "iam_action_required": "s3:GetBucketVersioning",
+                "error_category": "access_denied",
+                "explanation": f"Could not check versioning for bucket '{name}'.",
+            })
+            info["versioning"] = None  # Unknown, not False
+        elif not ver_err and ver_resp:
             status = ver_resp.get("Status", "")
             info["versioning"] = status == "Enabled"
-        if not info["versioning"]:
+        if info["versioning"] is False:
             stats["no_versioning"].append(name)
 
         # Replication
         rep_resp, rep_err = safe_api_call(s3, "get_bucket_replication", Bucket=name)
-        if not rep_err and rep_resp:
+        if rep_err and _is_access_denied(rep_err):
+            could_not_check.append({
+                "result_state": "could_not_check",
+                "resource": name,
+                "api_operation": "s3:GetBucketReplication",
+                "iam_action_required": "s3:GetReplicationConfiguration",
+                "error_category": "access_denied",
+                "explanation": f"Could not check replication for bucket '{name}'.",
+            })
+            info["replication"] = None  # Unknown
+        elif not rep_err and rep_resp:
             rules = rep_resp.get("ReplicationConfiguration", {}).get("Rules", [])
             if rules:
                 info["replication"] = True
                 stats["cross_region_replication"] += 1
-        if not info["replication"]:
+        elif rep_err and "ReplicationConfigurationNotFoundError" in str(rep_err):
+            # Genuinely no replication - this is a valid "not configured" result
+            info["replication"] = False
+        if info["replication"] is False:
             stats["no_replication"].append(name)
 
         # Lifecycle
         lc_resp, lc_err = safe_api_call(s3, "get_bucket_lifecycle_configuration", Bucket=name)
-        if not lc_err and lc_resp:
+        if lc_err and _is_access_denied(lc_err):
+            could_not_check.append({
+                "result_state": "could_not_check",
+                "resource": name,
+                "api_operation": "s3:GetBucketLifecycleConfiguration",
+                "iam_action_required": "s3:GetLifecycleConfiguration",
+                "error_category": "access_denied",
+                "explanation": f"Could not check lifecycle for bucket '{name}'.",
+            })
+            info["lifecycle"] = None  # Unknown
+        elif not lc_err and lc_resp:
             rules = lc_resp.get("Rules", [])
             if rules:
                 info["lifecycle"] = True
-        if not info["lifecycle"]:
+        if info["lifecycle"] is False:
             stats["no_lifecycle"].append(name)
 
         stats["buckets"].append(info)
@@ -80,7 +134,17 @@ def scan_storage(session, regions, progress=None, task_id=None) -> Tuple[Dict, L
                 "recommendation": "Enable cross-region replication for critical buckets.",
             })
 
+    if could_not_check:
+        findings.append({
+            "category": "storage",
+            "severity": "info",
+            "title": f"{len(could_not_check)} S3 storage check(s) could not be evaluated",
+            "detail": "One or more S3 resilience checks failed due to insufficient permissions. These resources were NOT confirmed compliant.",
+            "recommendation": "Grant the required IAM permissions and re-run the scan.",
+            "could_not_check": could_not_check,
+        })
+
     if progress and task_id:
         progress.advance(task_id)
 
-    return {"stats": stats, "findings": findings}, errors
+    return {"stats": stats, "findings": findings, "could_not_check": could_not_check}, errors

@@ -1,7 +1,18 @@
 """Data protection scanner, S3, RDS, EBS."""
 
-from .base import BaseScanner, ScanResult, Severity
+from .base import BaseScanner, ScanResult, Severity, Finding
 from ..utils.aws import safe_api_call
+
+
+def _is_access_denied(err_str: str) -> bool:
+    """Return True if the error string indicates an IAM authorization failure."""
+    if not err_str:
+        return False
+    lower = err_str.lower()
+    return any(phrase in lower for phrase in (
+        "access denied", "accessdenied", "unauthorizedaccess",
+        "unauthorizedoperation",
+    ))
 
 
 class DataScanner(BaseScanner):
@@ -13,11 +24,47 @@ class DataScanner(BaseScanner):
         self._scan_ebs()
         return ScanResult(findings=self.findings, resources=self.resources, errors=self.errors)
 
+    def _could_not_check(self, check_id: str, resource_id: str, api_operation: str,
+                         iam_action: str, error_category: str, err_detail: str):
+        """Record a finding indicating a control could not be evaluated.
+
+        A check is marked clean ONLY when the required evidence was successfully
+        retrieved and evaluated. This method ensures failed evaluations are never
+        silently reported as passing.
+        """
+        self.add_finding(
+            check_id=check_id,
+            title=f"Could not evaluate '{resource_id}': {iam_action} denied or unavailable",
+            severity=Severity.INFO,
+            resource_type="AWS::S3::Bucket",
+            resource_id=resource_id,
+            description=(
+                f"The control could not be evaluated. "
+                f"API operation: {api_operation}. "
+                f"Required IAM action: {iam_action}. "
+                f"Error: {error_category}. "
+                f"This resource was NOT confirmed clean. "
+                f"Grant the required permission and re-run to obtain a valid result."
+            ),
+            remediation=f"Grant {iam_action} permission and re-run the scan.",
+            details={
+                "result_state": "could_not_check",
+                "resource": resource_id,
+                "api_operation": api_operation,
+                "iam_action_required": iam_action,
+                "error_category": error_category,
+            },
+        )
+
     def _scan_s3(self):
         s3 = self.session.client("s3", region_name="us-east-1")
         buckets_resp, err = safe_api_call(s3, "list_buckets")
         if err:
             self.errors.append(f"S3 list: {err}")
+            if _is_access_denied(err):
+                self._could_not_check(
+                    "DATA-X01", "account-level", "s3:ListBuckets",
+                    "s3:ListAllMyBuckets", "access_denied", err)
             return
         buckets = (buckets_resp or {}).get("Buckets", [])
         self.resources["s3_buckets"] = buckets
@@ -26,8 +73,19 @@ class DataScanner(BaseScanner):
         for bucket in buckets:
             name = bucket["Name"]
             # Public access block
-            pab, _ = safe_api_call(s3, "get_public_access_block", Bucket=name)
-            if not pab:
+            pab, pab_err = safe_api_call(s3, "get_public_access_block", Bucket=name)
+            if pab_err and _is_access_denied(pab_err):
+                self._could_not_check(
+                    "DATA-X02", name, "s3:GetPublicAccessBlock",
+                    "s3:GetBucketPublicAccessBlock", "access_denied", pab_err)
+            elif not pab and not pab_err:
+                self.add_finding(
+                    check_id="DATA-001", title=f"S3 bucket '{name}' has no public access block",
+                    severity=Severity.HIGH, resource_type="AWS::S3::Bucket",
+                    resource_id=name, description="No S3 Block Public Access configuration.",
+                    remediation="Enable S3 Block Public Access on this bucket.")
+            elif not pab and pab_err:
+                # Non-access-denied error (e.g. NoSuchPublicAccessBlockConfiguration)
                 self.add_finding(
                     check_id="DATA-001", title=f"S3 bucket '{name}' has no public access block",
                     severity=Severity.HIGH, resource_type="AWS::S3::Bucket",
@@ -48,16 +106,30 @@ class DataScanner(BaseScanner):
 
             # Encryption
             enc, enc_err = safe_api_call(s3, "get_bucket_encryption", Bucket=name)
-            if enc_err and "ServerSideEncryptionConfigurationNotFoundError" in str(enc_err):
-                self.add_finding(
-                    check_id="DATA-003", title=f"S3 bucket '{name}' has no default encryption",
-                    severity=Severity.HIGH, resource_type="AWS::S3::Bucket",
-                    resource_id=name, description="No server-side encryption configured.",
-                    remediation="Enable default encryption (SSE-S3 or SSE-KMS).")
+            if enc_err:
+                if "ServerSideEncryptionConfigurationNotFoundError" in str(enc_err):
+                    self.add_finding(
+                        check_id="DATA-003", title=f"S3 bucket '{name}' has no default encryption",
+                        severity=Severity.HIGH, resource_type="AWS::S3::Bucket",
+                        resource_id=name, description="No server-side encryption configured.",
+                        remediation="Enable default encryption (SSE-S3 or SSE-KMS).")
+                elif _is_access_denied(enc_err):
+                    self._could_not_check(
+                        "DATA-X03", name, "s3:GetBucketEncryption",
+                        "s3:GetEncryptionConfiguration", "access_denied", enc_err)
+                else:
+                    self._could_not_check(
+                        "DATA-X03", name, "s3:GetBucketEncryption",
+                        "s3:GetEncryptionConfiguration", "api_error", enc_err)
+            # If enc is truthy and no error, encryption IS configured -> clean (no finding needed)
 
             # Versioning
-            ver, _ = safe_api_call(s3, "get_bucket_versioning", Bucket=name)
-            if not ver or ver.get("Status") != "Enabled":
+            ver, ver_err = safe_api_call(s3, "get_bucket_versioning", Bucket=name)
+            if ver_err and _is_access_denied(ver_err):
+                self._could_not_check(
+                    "DATA-X04", name, "s3:GetBucketVersioning",
+                    "s3:GetBucketVersioning", "access_denied", ver_err)
+            elif not ver or ver.get("Status") != "Enabled":
                 self.add_finding(
                     check_id="DATA-004", title=f"S3 bucket '{name}' versioning not enabled",
                     severity=Severity.MEDIUM, resource_type="AWS::S3::Bucket",

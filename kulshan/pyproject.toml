@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "kulshan"
 dynamic = ["version"]
-description = "Local-first, read-only AWS audit CLI. Ten audit packs, one command, zero writes."
+description = "Local-first AWS cost analysis and evidence CLI. Read-only by construction."
 readme = "README.md"
 license = { text = "Apache-2.0" }
 requires-python = ">=3.9"

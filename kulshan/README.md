@@ -1,36 +1,67 @@
 # Kulshan
 
-Read-only AWS audit CLI.
+Local-first AWS cost analysis and evidence CLI.
+
+Something changed in AWS. Kulshan helps you investigate what moved, what evidence supports the explanation, what evidence is missing, and how confident the conclusion should be.
 
 ```bash
 pip install kulshan
+aws sso login
+kulshan preflight
 kulshan report
 ```
-
-One command. One report. Zero writes to your AWS account.
 
 [![PyPI](https://img.shields.io/pypi/v/kulshan)](https://pypi.org/project/kulshan/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE.txt)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://python.org)
 
+---
+
+## What you get
+
+Kulshan produces a local HTML and JSON report containing:
+
+- Executive cost movement summary
+- Supporting evidence (anomaly detection, usage-type attribution, period deltas)
+- Contradicting or incomplete evidence (missing tags, gaps in coverage)
+- Ownership and attribution confidence
+- Coverage disclosure and unknowns
+- Recommended next investigation steps
+
+A check is marked clean only when the required AWS evidence was successfully retrieved and evaluated. Failed evaluations are reported as "could not check" with the denied action named, never silently passed.
+
+[View the synthetic sample report](https://missionfinops.com/sample/)
+
+![Kulshan report preview showing cost investigation structure: question, conclusion, supporting evidence, contradicting evidence, ownership confidence, and next step](https://missionfinops.com/assets/report-preview.svg)
+
+Local-first. Read-only. No SaaS. No telemetry.
+
+---
+
+## How it works
+
+```bash
+kulshan report                                    # cost investigation (default)
+kulshan report --packs security,sweep             # add security + waste detection
+kulshan report --packs all --regions us-east-1    # full diagnostic across all packs
+kulshan analyze cost --path ./cur/ --month 2026-06  # investigate CUR data locally
+```
+
+Reads Cost Explorer data and your own CUR/Data Export Parquet files in place. No data leaves your machine. DuckDB queries locally. No Athena, no Glue, no data warehouse.
+
+---
+
+## Trust model
+
+Read-only by construction, not by default. There is no cleanup mode, no write path, no telemetry to opt out of.
+
+- 159 read-only IAM actions, zero write actions. [Verify the policy.](https://github.com/MissionFinOps/kulshan/blob/master/kulshan/iam/kulshan-readonly.json)
+- Reports stay on your machine.
+- Per-pack least-privilege policies at [`iam/per-check/`](https://github.com/MissionFinOps/kulshan/tree/master/kulshan/iam/per-check).
+- Open source: Apache 2.0. IAM policy additionally CC BY 4.0.
+- [Policy page with SHA256 attestation](https://missionfinops.com/policy/)
+
 [Documentation](https://github.com/MissionFinOps/kulshan/tree/master/kulshan/docs) | [IAM Policy](https://github.com/MissionFinOps/kulshan/blob/master/kulshan/iam/kulshan-readonly.json) | [Changelog](https://github.com/MissionFinOps/kulshan/blob/master/kulshan/CHANGELOG.md)
-
----
-
-## What Kulshan does
-
-Ten read-only audit packs in one CLI. Cost anomalies, security posture, waste detection, DR gaps, drift, tag compliance, observability blind spots, quota headroom, and network topology - scored 0-100, exportable as HTML, JSON, SARIF, or CSV.
-
-Reads your Cost Explorer data and your own CUR/Data Export Parquet files in place. No data leaves your machine. No SaaS account. No telemetry. Nothing to opt out of, because nothing exists.
-
----
-
-## What Kulshan does not do
-
-- Does not write to AWS. The IAM policy contains only Get, List, and Describe actions.
-- Does not phone home. No telemetry, no update checks, no analytics.
-- Does not require infrastructure. No databases, no containers, no SaaS.
-- Does not hold credentials. Uses the same credential chain as the AWS CLI.
 
 ---
 
@@ -49,7 +80,8 @@ Python 3.9+. macOS, Linux, Windows. Optional extras: `kulshan[pdf]`, `kulshan[ex
 If `aws sts get-caller-identity` works, Kulshan works.
 
 ```bash
-aws login
+aws sso login
+kulshan preflight
 kulshan report
 ```
 
@@ -60,7 +92,22 @@ kulshan --profile production report
 kulshan --role-arn arn:aws:iam::123456789012:role/KulshanAudit report
 ```
 
-Run `kulshan preflight` to check connectivity and permissions without incurring any cost.
+Run `kulshan preflight` to check connectivity and permissions before scanning.
+
+---
+
+## CUR / Data Export Investigation
+
+Query your CUR Parquet files locally or from S3. No Athena, no Glue, no data warehouse. DuckDB queries in place.
+
+```bash
+kulshan cur validate --path ./cur/
+kulshan analyze cost --path ./cur/ --month 2024-06
+kulshan analyze ec2 --cur ./cur/ --month 2024-06
+kulshan analyze cost --s3 s3://bucket/prefix/ --month 2024-06
+```
+
+Top movers by service, account, region, usage type. Period-over-period deltas. Resource-level contributors. Tag coverage. All outputs include provenance, evidence IDs, and `human_review_required: true`.
 
 ---
 
@@ -106,21 +153,6 @@ Workspaces with multiple connections produce consolidated reports automatically 
 
 ---
 
-## CUR / Data Export Investigation
-
-Query your CUR Parquet files locally or from S3. No Athena, no Glue, no data warehouse. DuckDB queries in place.
-
-```bash
-kulshan cur validate --path ./cur/
-kulshan analyze cost --path ./cur/ --month 2024-06
-kulshan analyze ec2 --cur ./cur/ --month 2024-06
-kulshan analyze cost --s3 s3://bucket/prefix/ --month 2024-06
-```
-
-Top movers by service, account, region, usage type. Period-over-period deltas. Resource-level contributors. Tag coverage. All outputs include provenance, evidence IDs, and `human_review_required: true`.
-
----
-
 ## MCP Server
 
 Kulshan exposes its findings to MCP-compatible agents (Claude Desktop, Cursor, Kiro, others). Deterministic evidence in, agent reasoning out.
@@ -162,19 +194,6 @@ kulshan report --packs security --format sarif -o results.sarif --yes --no-histo
 ```
 
 Exit code 1 when critical findings are present - use as a quality gate. SARIF uploads to GitHub Code Scanning. Full GitHub Actions and GitLab CI examples in [docs/ci-cd.md](https://github.com/MissionFinOps/kulshan/blob/master/docs/ci-cd.md).
-
----
-
-## Trust and Security
-
-> Read-only by construction, not read-only by default. There is no cleanup mode to leave off, no write path to enable. The published IAM policy contains zero actions that create, modify, or delete AWS resources.
-
-- 159 read-only actions, zero write actions. [Read every line.](https://github.com/MissionFinOps/kulshan/blob/master/iam/kulshan-readonly.json)
-- Reports stay on your machine
-- No telemetry, no phone-home
-- Open source: Apache 2.0. IAM policy additionally CC BY 4.0.
-- Per-pack least-privilege policies at [`iam/per-check/`](https://github.com/MissionFinOps/kulshan/tree/master/iam/per-check)
-- Compliance metadata: CIS, SOC 2, NIST 800-53, Well-Architected
 
 ---
 

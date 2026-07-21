@@ -1146,7 +1146,7 @@
       "baseline_eligible": true
     },
     {
-      "iam_action": "s3:GetBucketEncryption",
+      "iam_action": "s3:GetEncryptionConfiguration",
       "boto3_method": "s3.get_bucket_encryption",
       "aws_access_level": "Read",
       "status": "required",
@@ -1154,7 +1154,7 @@
       "baseline_eligible": true
     },
     {
-      "iam_action": "s3:GetBucketLifecycleConfiguration",
+      "iam_action": "s3:GetLifecycleConfiguration",
       "boto3_method": "s3.get_bucket_lifecycle_configuration",
       "aws_access_level": "Read",
       "status": "required",
@@ -1202,7 +1202,7 @@
       "baseline_eligible": true
     },
     {
-      "iam_action": "s3:GetBucketReplication",
+      "iam_action": "s3:GetReplicationConfiguration",
       "boto3_method": "s3.get_bucket_replication",
       "aws_access_level": "Read",
       "status": "required",

@@ -126,7 +126,8 @@ kulshan/scripts/setup-*
 # --- Sync / backup scratch (local tool artifacts) ---
 .sync-*/
 .kiro/
-docs/
+/docs/
+!kulshan/docs/report-preview.svg
 kulshan/PLAN-0.4.0.md
 kulshan/test_*.txt
 results.txt

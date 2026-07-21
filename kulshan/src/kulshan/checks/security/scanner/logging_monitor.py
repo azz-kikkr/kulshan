@@ -61,10 +61,16 @@ class LoggingScanner(BaseScanner):
 
     def _scan_guardduty(self):
         regions_without_gd = []
+        regions_could_not_check = []
         for region in self.regions:
             gd = self.session.client("guardduty", region_name=region)
             detectors, err = safe_api_call(gd, "list_detectors")
-            if err: continue
+            if err:
+                if "access denied" in str(err).lower() or "accessdenied" in str(err).lower():
+                    regions_could_not_check.append(region)
+                else:
+                    self.errors.append(f"GuardDuty ({region}): {err}")
+                continue
             detector_ids = (detectors or {}).get("DetectorIds", [])
             if not detector_ids:
                 regions_without_gd.append(region)
@@ -90,10 +96,42 @@ class LoggingScanner(BaseScanner):
                 resource_id="account", description=f"No threat detection in: {', '.join(regions_without_gd[:5])}",
                 remediation="Enable GuardDuty in all regions.")
 
+        if regions_could_not_check:
+            self.add_finding(
+                check_id="LOG-X01",
+                title=f"GuardDuty could not be checked in {len(regions_could_not_check)} region(s)",
+                severity=Severity.INFO, resource_type="AWS::GuardDuty::Detector",
+                resource_id="account",
+                description=(
+                    f"Access denied when listing GuardDuty detectors in: "
+                    f"{', '.join(regions_could_not_check[:5])}. "
+                    f"Required IAM action: guardduty:ListDetectors. "
+                    f"These regions were NOT confirmed clean."
+                ),
+                remediation="Grant guardduty:ListDetectors permission and re-run.",
+                details={"result_state": "could_not_check", "regions": regions_could_not_check})
+
     def _scan_config(self):
         cfg = self.session.client("config", region_name="us-east-1")
         recorders, err = safe_api_call(cfg, "describe_configuration_recorders")
-        if err: return
+        if err:
+            if "access denied" in str(err).lower() or "accessdenied" in str(err).lower():
+                self.add_finding(
+                    check_id="LOG-X02",
+                    title="AWS Config could not be checked: access denied",
+                    severity=Severity.INFO,
+                    resource_type="AWS::Config::ConfigurationRecorder",
+                    resource_id="account",
+                    description=(
+                        "Access denied when describing Config recorders. "
+                        "Required IAM action: config:DescribeConfigurationRecorders. "
+                        "Config status was NOT evaluated."
+                    ),
+                    remediation="Grant config:DescribeConfigurationRecorders permission and re-run.",
+                    details={"result_state": "could_not_check"})
+            else:
+                self.errors.append(f"Config: {err}")
+            return
         recorder_list = (recorders or {}).get("ConfigurationRecorders", [])
         self.advance()
         if not recorder_list:
@@ -114,10 +152,16 @@ class LoggingScanner(BaseScanner):
                     remediation="Start the Config recorder.")
 
     def _scan_access_analyzer(self):
+        could_not_check_regions = []
         for region in self.regions[:3]:  # Check a few key regions
             aa = self.session.client("accessanalyzer", region_name=region)
             analyzers, err = safe_api_call(aa, "list_analyzers")
-            if err: continue
+            if err:
+                if "access denied" in str(err).lower() or "accessdenied" in str(err).lower():
+                    could_not_check_regions.append(region)
+                else:
+                    self.errors.append(f"Access Analyzer ({region}): {err}")
+                continue
             if not (analyzers or {}).get("analyzers"):
                 self.add_finding(
                     check_id="LOG-009", title=f"IAM Access Analyzer not enabled in {region}",
@@ -126,3 +170,19 @@ class LoggingScanner(BaseScanner):
                     description="No automated detection of external resource access.",
                     remediation="Enable IAM Access Analyzer to detect unintended external access.")
                 break  # Only report once
+
+        if could_not_check_regions:
+            self.add_finding(
+                check_id="LOG-X03",
+                title=f"Access Analyzer could not be checked in {len(could_not_check_regions)} region(s)",
+                severity=Severity.INFO,
+                resource_type="AWS::AccessAnalyzer::Analyzer",
+                resource_id="account",
+                description=(
+                    f"Access denied when listing analyzers in: "
+                    f"{', '.join(could_not_check_regions)}. "
+                    f"Required IAM action: access-analyzer:ListAnalyzers. "
+                    f"Access Analyzer status was NOT confirmed clean."
+                ),
+                remediation="Grant access-analyzer:ListAnalyzers permission and re-run.",
+                details={"result_state": "could_not_check", "regions": could_not_check_regions})

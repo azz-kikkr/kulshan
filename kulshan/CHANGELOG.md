@@ -14,7 +14,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Corrected IAM ownership and source coverage validation.
 
-## [Unreleased]
+## [0.4.2] - 2026-07-20
+
+### Fixed
+- Corrected three invalid S3 IAM action names in the published policy:
+  - `s3:GetBucketEncryption` replaced with `s3:GetEncryptionConfiguration`
+  - `s3:GetBucketLifecycleConfiguration` replaced with `s3:GetLifecycleConfiguration`
+  - `s3:GetBucketReplication` replaced with `s3:GetReplicationConfiguration`
+- Eliminated false-clean behavior: an authorization failure or API error during an S3 check can no longer produce a clean/passing result. Failed evaluations are now reported as "could not check" with the denied IAM action named.
+- Applied the same fix to GuardDuty, AWS Config, and IAM Access Analyzer checks that previously swallowed AccessDenied errors silently.
+- Fixed `access-analyzer:*` shorthand on the website policy page to accurately reflect the enumerated actions (`access-analyzer:Get*`, `access-analyzer:List*`).
+
+### Security
+- **Trust Ledger entry:** All versions prior to 0.4.2 could report a false clean for S3 encryption, lifecycle, or replication checks if the IAM policy granted the incorrect action names (which granted nothing). Previous policy SHA256: `3c9e7673091705aa70be9990e81ee5625bc876e2a4d68748e3761d4233decc7b`. Corrected policy SHA256: `ce96ca80037e1b9edc3e2d7125c6ff1acd41bae83e64f064c0ac1f0a1586d50e`.
 
 ## [0.4.1] - 2026-07-18
 
